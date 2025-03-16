@@ -1,0 +1,27 @@
+FROM eclipse-temurin:latest AS builder
+
+WORKDIR /app
+RUN apt-get update && apt-get install -y unzip
+
+COPY gradle-8.12.1-bin.zip /opt/gradle/
+RUN unzip /opt/gradle/gradle-8.12.1-bin.zip -d /opt/gradle
+
+ENV GRADLE_HOME=/opt/gradle/gradle-8.12.1
+ENV PATH="$GRADLE_HOME/bin:$PATH"
+
+COPY gradlew .
+COPY gradle gradle
+
+COPY . .
+
+RUN gradle build --no-daemon
+
+FROM eclipse-temurin:latest
+
+WORKDIR /app
+
+COPY --from=builder /app/build/libs/gateway_api-1.0.jar .
+
+EXPOSE 8082
+
+ENTRYPOINT ["java", "-jar", "gateway_api-1.0.jar"]

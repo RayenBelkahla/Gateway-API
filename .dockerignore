@@ -1,0 +1,6 @@
+.idea/
+.git/
+.gitignore
+*.log
+Envoy.yaml
+compose.yaml
