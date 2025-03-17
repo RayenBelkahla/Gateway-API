@@ -1,6 +1,6 @@
 static_resources:
   listeners:
-    - name: listener_0
+    - name: listener
       address:
         socket_address:
           address: 0.0.0.0
@@ -17,37 +17,14 @@ static_resources:
                     - name: gateway-service
                       domains: ["*"]
                       routes:
-                        - match: { prefix: "/" }
+                        - match: { prefix: "/api" }
                           route: { cluster: gateway_service }
                 http_filters:
-                  - name: envoy.filters.http.jwt_authn
-                    typed_config:
-                      "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
-                      providers:
-                        keycloak:
-                          issuer: "http://localhost:8080/realms/rayen-realm"
-                          remote_jwks:
-                            http_uri:
-                              uri: "http://localhost:8080/realms/auth-realm/protocol/openid-connect/certs"
-                              cluster: keycloak_cluster
-                              timeout: 5s
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
   clusters:
-    - name: keycloak_cluster
-      type: STRICT_DNS
-      load_assignment:
-        cluster_name: keycloak_cluster
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address:
-                      address: keycloak
-                      port_value: 8080
-
     - name: gateway_service
       type: STRICT_DNS
       load_assignment:
@@ -57,6 +34,6 @@ static_resources:
               - endpoint:
                   address:
                     socket_address:
-                      address: localhost
+                      address: 172.21.112.1
                       port_value: 8082
 
