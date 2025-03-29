@@ -13,16 +13,34 @@ static_resources:
                 codec_type: AUTO
                 stat_prefix: ingress_http
                 route_config:
+                  request_headers_to_add:
+                    - header:
+                        key: X-Forwarded-Port
+                        value: "%DOWNSTREAM_LOCAL_PORT%"
+                    - header:
+                        key: Authorization
+                        value: "%REQ(Authorization)%"
+                      append: false
                   virtual_hosts:
                     - name: gateway-service
                       domains: ["*"]
                       routes:
-                        - match: { prefix: "/api" }
-                          route: { cluster: gateway_service }
+                        - match: { prefix: "/redirect" }
+                          route: { cluster: gateway_service}
+                        - match: { prefix: "/authorize" }
+                          route: { cluster: gateway_service}
+                        - match: { prefix: "/login"}
+                          route: { cluster: gateway_service}
+                        - match: { prefix: "/oauth2"}
+                          route: { cluster: gateway_service}
+                        - match: { prefix: "/api"}
+                          route: { cluster: resource_server}
+
                 http_filters:
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
 
   clusters:
     - name: gateway_service
@@ -34,6 +52,28 @@ static_resources:
               - endpoint:
                   address:
                     socket_address:
-                      address: 172.21.112.1
+                      address: localhost
                       port_value: 8082
+    - name: resource_server
+      type: STRICT_DNS
+      load_assignment:
+        cluster_name: resource_server
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: localhost
+                      port_value: 8085
+    - name: keycloak
+      type: STRICT_DNS
+      load_assignment:
+        cluster_name: keycloak_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: localhost
+                      port_value: 8080
 
