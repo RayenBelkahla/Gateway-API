@@ -17,16 +17,10 @@ static_resources:
                     - header:
                         key: X-Forwarded-Port
                         value: "%DOWNSTREAM_LOCAL_PORT%"
-                    - header:
-                        key: Authorization
-                        value: "%REQ(Authorization)%"
-                      append: false
                   virtual_hosts:
                     - name: gateway-service
                       domains: ["*"]
                       routes:
-                        - match: { prefix: "/redirect" }
-                          route: { cluster: gateway_service}
                         - match: { prefix: "/authorize" }
                           route: { cluster: gateway_service}
                         - match: { prefix: "/login"}
@@ -35,16 +29,90 @@ static_resources:
                           route: { cluster: gateway_service}
                         - match: { prefix: "/api"}
                           route: { cluster: resource_server}
+                          typed_per_filter_config:
+                            envoy.filters.http.lua:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.LuaPerRoute
+                              source_code:
+                                inline_string: |
+                                  function envoy_on_request(request_handle)
+                                    -- call headers init
+                                    local cookie_header = request_handle:headers():get("cookie")
+                                    local cluster_name = "gateway_service"
+                                    local path = "/authorize/get/keycloak"
+                                    local method = "GET"
+                                    local authority = "localhost:9901"
 
+                                    -- Http call
+                                    local success, headers, body = pcall(request_handle.httpCall, request_handle,
+                                      cluster_name,
+                                      {
+                                        [":method"] = method,
+                                        [":path"] = path,
+                                        [":authority"] = authority,
+                                        ["Cookie"] = cookie_header
+                                      },
+                                      "",
+                                      5000
+                                    )
+                                    -- error handling 
+                                    if not success or headers[":status"] ~= "200" then
+                                      
+                                      request_handle:logErr("HTTP call failed with status: " .. headers[":status"])
+                                      if headers[":status"] == "302" then
+                                        request_handle:logErr("Need to authenticate, call being redirected to authorization ")
+                                        request_handle:respond({[":status"] = "401"}, "Authentication needed")
+                                      end
+                                      request_handle:logErr("Response body: " .. (body or "empty"))
+                                      request_handle:respond({[":status"] = "500"}, "Internal Server Error")
+                                      return
+                                    end
+                                   
+                                    
+                                    request_handle:logInfo("body" .. body)
+                                    -- json decoding 
+                                    local json = require "json"
+                                    local decoded
+                                    success, decoded = pcall(json.decode, body)
+                                    if not success or type(decoded) ~= "table" then
+                                    request_handle:logErr("Failed json decoding: " .. tostring(body))
+                                      request_handle:respond({[":status"] = "500"}, "Internal Server Error")
+                                    return
+                                    end
+
+                                    local accessToken = decoded["accessTokenValue"] 
+                                    local refreshToken = decoded["refreshTokenValue"] 
+                                    local clientId = decoded["clientRegistrationId"]
+                                    local principal = decoded["principalName"]
+                                    local scopes = decoded["accessTokenScopes"]
+
+                                    -- Log extracted values
+                                    request_handle:logInfo("Access Token: " .. string.sub(accessToken, 1, 50) .. "...")
+                                    request_handle:logInfo("Refresh Token: " .. string.sub(refreshToken, 1, 50) .. "...")
+                                    request_handle:logInfo("Client ID: " .. clientId)
+                                    request_handle:logInfo("Principal Name: " .. principal)
+                                    request_handle:logInfo("Scopes: " .. table.concat(scopes, ", "))
+
+                                      request_handle:headers():add("Authorization", "Bearer " .. accessToken)
+                                  end
+                        - match: { prefix: "/restricted"}
+                          route: { cluster: resource_server}
                 http_filters:
+                  - name: envoy.filters.http.lua
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                      default_source_code:
+                        inline_string: |
+                          
+
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
-
   clusters:
     - name: gateway_service
+      connect_timeout: 5s
       type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
       load_assignment:
         cluster_name: gateway_service
         endpoints:
@@ -55,7 +123,9 @@ static_resources:
                       address: localhost
                       port_value: 8082
     - name: resource_server
+      connect_timeout: 5s
       type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
       load_assignment:
         cluster_name: resource_server
         endpoints:
@@ -66,9 +136,11 @@ static_resources:
                       address: localhost
                       port_value: 8085
     - name: keycloak
+      connect_timeout: 5s
       type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
       load_assignment:
-        cluster_name: keycloak_cluster
+        cluster_name: keycloak
         endpoints:
           - lb_endpoints:
               - endpoint:
