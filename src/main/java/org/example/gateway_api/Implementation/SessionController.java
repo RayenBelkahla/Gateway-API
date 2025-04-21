@@ -5,6 +5,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebSession;
 import reactor.core.publisher.Mono;
 import java.util.Map;
 
@@ -23,11 +24,12 @@ public class SessionController {
     }
 
     @GetMapping("/session-data")
-    public Mono<Map<String, Object>> getSessionAttributes(ServerWebExchange exchange) {
+    public Mono<WebSession> getSessionAttributes(ServerWebExchange exchange) {
         return sessionService.getSessionAttributes(exchange);
     }
     @GetMapping("/get/{attribute}")
-    public Mono<Map<String, Object>> getAttribute(@PathVariable String attribute ,ServerWebExchange exchange) {
-        return sessionService.getSessionAttribute(attribute, exchange);
+    public Mono<Map<String, Object>> getSession(@PathVariable String attribute ,ServerWebExchange exchange) {
+        return sessionService.getSession(attribute, exchange);
     }
+
 }

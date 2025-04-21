@@ -1,0 +1,33 @@
+package org.example.gateway_api.Implementation;
+
+import org.example.gateway_api.Implementation.Service.SessionService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/public")
+public class Public {
+    public final SessionService sessionService;
+    @Autowired
+    public Public(SessionService sessionService) {
+        this.sessionService = sessionService;
+    }
+    @GetMapping("/testing")
+    public Mono<String> testing(ServerWebExchange exchange) {
+        return sessionService.verifyDeviceId(exchange);
+    }
+    @GetMapping("/get/{attribute}")
+    public Mono<Map<String, Object>> getSession(@PathVariable String attribute , ServerWebExchange exchange) {
+        return sessionService.getSession(attribute, exchange);
+    }
+
+
+
+}

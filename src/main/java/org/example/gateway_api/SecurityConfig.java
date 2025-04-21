@@ -14,9 +14,7 @@ import org.springframework.security.oauth2.client.web.DefaultReactiveOAuth2Autho
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.client.web.server.WebSessionServerOAuth2AuthorizedClientRepository;
 import org.springframework.security.web.server.SecurityWebFilterChain;
-import org.springframework.security.web.server.authentication.logout.ServerLogoutSuccessHandler;
-import org.springframework.security.web.server.authentication.logout.WebSessionServerLogoutHandler;
-import reactor.core.publisher.Mono;
+import org.springframework.security.web.server.context.WebSessionServerSecurityContextRepository;
 import java.net.URI;
 
 
@@ -25,26 +23,25 @@ import java.net.URI;
 public class SecurityConfig {
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
-        http
+        return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchanges -> exchanges
-                        .anyExchange().authenticated())
-                .oauth2Client(Customizer.withDefaults());
-        http.oauth2Login(oauth2 -> oauth2
-                .authenticationSuccessHandler((webFilterExchange, authentication) ->
-                        Mono.fromRunnable(() -> webFilterExchange.getExchange().getResponse().setStatusCode(HttpStatus.FOUND))
-                                .then(Mono.fromRunnable(() -> webFilterExchange.getExchange().getResponse().getHeaders().setLocation(URI.create("/authorize/user"))))
-                                .then(webFilterExchange.getExchange().getResponse().setComplete())))
-                .logout(logout -> logout
-                        .logoutSuccessHandler(logoutSuccessHandler())
-                );
-        return http.build();
+                        .pathMatchers("/public/**").permitAll()
+                        .anyExchange().authenticated()
+                )
+                .oauth2Client(Customizer.withDefaults())
+                .oauth2Login(oauth2 -> oauth2
+                        .authenticationSuccessHandler((webFilterExchange, authentication) -> {
+                            var response = webFilterExchange.getExchange().getResponse();
+                            response.setStatusCode(HttpStatus.FOUND);
+                            response.getHeaders().setLocation(URI.create("/authorize/user"));
+                            return response.setComplete();
+                        })
+                )
+                .securityContextRepository(new WebSessionServerSecurityContextRepository())
+                .build();
     }
-    @Bean
-    public ServerLogoutSuccessHandler logoutSuccessHandler() {
-        WebSessionServerLogoutHandler logoutHandler = new WebSessionServerLogoutHandler();
-        return logoutHandler::logout;
-    }
+
     @Bean
     ServerOAuth2AuthorizedClientRepository authorizedClientRepository()
     {
