@@ -113,7 +113,7 @@ static_resources:
                               response_handle:logInfo("x-device-id --> " .. set_cookie)
                               response_handle:headers():add("Set-Cookie" , set_cookie)
                           	end
-                          response_handle:headers():add("Set-Cookie", "SESSION=" .. session_id .."; Path=/;")
+                          -- response_handle:headers():add("Set-Cookie", "SESSION_ID" .. session_id .."; Path=/;")
                           end
                   - name: envoy.filters.http.router
                     typed_config:

@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebSession;
 import reactor.core.publisher.Mono;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -53,6 +52,7 @@ public class SessionService {
 
     public Mono<String> verifyDeviceId(ServerWebExchange exchange) {
         HttpCookie deviceIdValue = exchange.getRequest().getCookies().getFirst("x-device-id");
+        System.out.println(exchange.getRequest().getCookies());
         ResponseCookie responseCookie;
         if (deviceIdValue != null) {
             responseCookie = ResponseCookie.from("x-device-id", deviceIdValue.getValue())
