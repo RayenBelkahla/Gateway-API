@@ -70,6 +70,7 @@ static_resources:
                               "",
                               5000
                               )
+                              
                               local json = require "json"
                               local decoded
                               success, decoded = pcall(json.decode, body)
@@ -86,11 +87,12 @@ static_resources:
                           	end
 
                           	if string.find(route, "^/devices") then 
+                              local cookie = request_handle:headers():get("cookie")
                               local path = "/public/testing"
                               local headers, body = request_handle:httpCall(
-                                        cluster_name,
-                                        {
-                                        [":method"] = method,
+                              cluster_name,
+                              {
+                              [":method"] = method,
                               [":path"] = path,
                               [":authority"] = authority,
                               ["cookie"] = cookie
