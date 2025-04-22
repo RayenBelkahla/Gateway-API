@@ -54,7 +54,7 @@ static_resources:
                           	local cookie_header = request_handle:headers():get("cookie")
                           	local route = request_handle:headers():get(":path")
                           	local method = "GET"
-                          	local authority = "localhost:9901"
+                            local authority = request_handle:headers():get(":authority")
                           	local cluster_name = "gateway_service"
                           	if string.find(route, "^/api") or string.find(route, "^/restricted") or string.find(route, "^/devices") then
                               
@@ -62,9 +62,9 @@ static_resources:
                               local success, headers, body = pcall(request_handle.httpCall, request_handle,
                               cluster_name,
                               {
+                              [":authority"] = authority,
                               [":method"] = method,
                               [":path"] = path,
-                              [":authority"] = authority,
                               ["Cookie"] = cookie_header
                               },
                               "",
@@ -113,7 +113,6 @@ static_resources:
                               response_handle:logInfo("x-device-id --> " .. set_cookie)
                               response_handle:headers():add("Set-Cookie" , set_cookie)
                           	end
-                          -- response_handle:headers():add("Set-Cookie", "SESSION_ID" .. session_id .."; Path=/;")
                           end
                   - name: envoy.filters.http.router
                     typed_config:

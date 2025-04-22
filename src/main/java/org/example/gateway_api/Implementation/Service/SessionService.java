@@ -52,7 +52,7 @@ public class SessionService {
 
     public Mono<String> verifyDeviceId(ServerWebExchange exchange) {
         HttpCookie deviceIdValue = exchange.getRequest().getCookies().getFirst("x-device-id");
-        System.out.println(exchange.getRequest().getCookies());
+        System.out.println("extracted cookie data" + exchange.getRequest().getCookies());
         ResponseCookie responseCookie;
         if (deviceIdValue != null) {
             responseCookie = ResponseCookie.from("x-device-id", deviceIdValue.getValue())
