@@ -57,7 +57,7 @@ static_resources:
                             local authority = request_handle:headers():get(":authority")
                           	local cluster_name = "gateway_service"
                           	if string.find(route, "^/api") or string.find(route, "^/restricted") or string.find(route, "^/devices") then
-                              
+                              request_handle:logInfo("Initiating Http Call to retrieve Auth Header triggered by route: " .. route ) 
                               local path = "/authorize/get/keycloak"
                               local success, headers, body = pcall(request_handle.httpCall, request_handle,
                               cluster_name,
@@ -70,7 +70,14 @@ static_resources:
                               "",
                               5000
                               )
-                              
+                              if not success or headers[":status"] ~= "200" then
+                                request_handle:logErr("Auth check HTTP call failed. Status: " .. headers[":status"])
+                                if headers and headers[":status"] == "500" then
+                                  request_handle:logInfo("Internal Server Error --> Check logs on Auth client")
+                                end
+                                request_handle:respond({[":status"] = "401"}, "Authentication required.")
+                                  return
+                              end
                               local json = require "json"
                               local decoded
                               success, decoded = pcall(json.decode, body)
@@ -81,12 +88,13 @@ static_resources:
                               end
                           
                           		local accessToken = decoded["accessTokenValue"]
-                                session_id = decoded["id"]
+                          		-- TODO: retrieve all headers returned in body or header and add them 
                           		request_handle:headers():add("Authorization", "Bearer " .. accessToken)
-                                
+                          
                           	end
 
-                          	if string.find(route, "^/devices") then 
+                          	if string.find(route, "^/devices") then
+                              request_handle:logInfo("Initiating Http call to retrieve set-cookie")
                               local cookie = request_handle:headers():get("cookie")
                               local path = "/public/testing"
                               local headers, body = request_handle:httpCall(
@@ -99,9 +107,12 @@ static_resources:
                               },
                               "",
                               5000)
+                              -- in case of retrieving multiple set-cookie headers
+                              local index = 0 
                               for key, value in pairs(headers) do
                                 if key:lower() == "set-cookie" then
-                                  set_cookie = value
+                                  request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
+                                  request_handle:logInfo("set-cookie header " .. index .. " stored successfully")
                                   break
                                 end
                           	  end
@@ -109,10 +120,16 @@ static_resources:
                           end
 
                           function envoy_on_response(response_handle)
-                          	if set_cookie then
-                              response_handle:logInfo("x-device-id --> " .. set_cookie)
-                              response_handle:headers():add("Set-Cookie" , set_cookie)
-                          	end
+                            if response_handle:streamInfo():dynamicMetadata():get("envoy.lua") then
+                              local set_cookies = response_handle:streamInfo():dynamicMetadata():get("envoy.lua")
+                              local index = 0
+                          	  while set_cookies["set-cookie-" .. index] do
+                               local set_cookie = set_cookies["set-cookie-" .. index]
+                                response_handle:logInfo("set-cookie header --> " .. set_cookie)
+                                response_handle:headers():add("Set-Cookie" , set_cookie)
+                                index = index + 1
+                          	  end
+                            end
                           end
                   - name: envoy.filters.http.router
                     typed_config:
@@ -145,5 +162,3 @@ static_resources:
                     socket_address:
                       address: localhost
                       port_value: 8085
-
-

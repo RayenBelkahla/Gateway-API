@@ -31,5 +31,4 @@ public class SessionController {
     public Mono<Map<String, Object>> getSession(@PathVariable String attribute ,ServerWebExchange exchange) {
         return sessionService.getSession(attribute, exchange);
     }
-
 }

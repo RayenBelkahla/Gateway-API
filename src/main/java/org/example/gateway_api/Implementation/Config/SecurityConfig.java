@@ -1,4 +1,4 @@
-package org.example.gateway_api;
+package org.example.gateway_api.Implementation.Config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -66,7 +66,4 @@ public class SecurityConfig {
 
         return authorizedClientManager;
     }
-
-
-
 }
