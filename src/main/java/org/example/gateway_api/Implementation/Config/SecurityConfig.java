@@ -33,8 +33,6 @@ public class SecurityConfig {
                 .oauth2Login(oauth2 -> oauth2
                         .authenticationSuccessHandler((webFilterExchange, authentication) -> {
                             var response = webFilterExchange.getExchange().getResponse();
-                            response.setStatusCode(HttpStatus.FOUND);
-                            response.getHeaders().setLocation(URI.create("/authorize/user"));
                             return response.setComplete();
                         })
                 )
