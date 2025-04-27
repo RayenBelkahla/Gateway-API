@@ -1,6 +1,7 @@
 package org.example.gateway_api.Implementation.Service;
 import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
@@ -45,20 +46,24 @@ public class SessionService {
                         OAuth2AccessToken accessToken = client.getAccessToken();
                         data.put("principalName", client.getPrincipalName());
                         data.put("clientRegistrationId", client.getClientRegistration().getRegistrationId());
-                        data.put("refreshToken", client.getRefreshToken());
                         if (accessToken != null) {
                             data.put("accessTokenValue", accessToken.getTokenValue());
                             data.put("accessTokenExpiresAt", accessToken.getExpiresAt());
                         }
                     }
+                    exchange.getRequest().getHeaders().forEach((key,values) ->
+                    {
+                        for (String value:values)
+                            data.put(key,value);
+                    });
                     return data;
                 })
                 .defaultIfEmpty(data);
     }
     public Mono<String> verifyDeviceId(ServerWebExchange exchange) {
         HttpCookie deviceIdValue = exchange.getRequest().getCookies().getFirst("x-device-id");
-        System.out.println("extracted cookie data" + exchange.getRequest().getCookies());
         ResponseCookie responseCookie;
+
         if (deviceIdValue != null) {
             responseCookie = ResponseCookie.from("x-device-id", deviceIdValue.getValue())
                     .httpOnly(true)
@@ -67,8 +72,12 @@ public class SessionService {
                     .maxAge(36000000)
                     .build();
         }
-        else
-        {
+        else if( exchange.getRequest().getHeaders().containsKey("X-App-Version-Key")) {
+                exchange.getResponse().setStatusCode(HttpStatusCode.valueOf(400));
+                return Mono.empty();
+        }
+
+        else {
             UUID uuid = UUID.randomUUID();
             responseCookie = ResponseCookie.from("x-device-id", uuid.toString())
                     .httpOnly(true)
@@ -80,6 +89,4 @@ public class SessionService {
         exchange.getResponse().getHeaders().add(HttpHeaders.SET_COOKIE, responseCookie.toString());
         return Mono.just(responseCookie.getValue());
     }
-
-
 }

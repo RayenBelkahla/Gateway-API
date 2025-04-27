@@ -1,5 +1,6 @@
 package org.example.gateway_api.Implementation;
 
+import org.example.gateway_api.Implementation.Service.HeadersValidation;
 import org.example.gateway_api.Implementation.Service.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,18 +15,25 @@ import java.util.Map;
 @RestController
 @RequestMapping("/public")
 public class Public {
+    public final HeadersValidation headerValidator;
     public final SessionService sessionService;
     @Autowired
-    public Public(SessionService sessionService) {
+    public Public(SessionService sessionService, HeadersValidation headerValidator) {
         this.sessionService = sessionService;
+        this.headerValidator = headerValidator;
     }
-    @GetMapping("/testing")
+    @GetMapping("/device")
     public Mono<String> testing(ServerWebExchange exchange) {
-        return sessionService.verifyDeviceId(exchange);
+         return sessionService.verifyDeviceId(exchange);
     }
     @GetMapping("/get/{attribute}")
     public Mono<Map<String, Object>> getSession(@PathVariable String attribute , ServerWebExchange exchange) {
         return sessionService.getSession(attribute, exchange);
+    }
+
+    @GetMapping("/headers")
+    public Mono<Map<String, Object>> getHeaders(ServerWebExchange exchange) {
+        return Mono.just(headerValidator.filter(exchange));
     }
 
 

@@ -28,10 +28,7 @@ static_resources:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.LuaPerRoute
                               source_code:
                                 inline_string: |
-                                  function envoy_on_response(response_handle)
-                                    local set_cookie_header= response_handle:headers():get("Set-Cookie")
-                                    response_handle:logInfo("result:" .. set_cookie_header)
-                                  end
+
                         - match: { prefix: "/authorize" }
                           route: { cluster: gateway_service}
                         - match: { prefix: "/login"}
@@ -51,13 +48,91 @@ static_resources:
                       default_source_code:
                         inline_string: |
                           function envoy_on_request(request_handle)
-                          	local cookie_header = request_handle:headers():get("cookie")
+                            local json = require "json"
+                            
+                            request_handle:logInfo("Initiating HTTP Call for App Version parsing")
+                            local authority = request_handle:headers():get(":authority")
+                            local path = "/public/headers"
+                            local method = "GET"
+                            local cluster_name = "gateway_service"
+                          
+                            -- http call
+                            local headers, body = request_handle:httpCall(
+                            cluster_name,
+                            {
+                            [":method"] = method,
+                            [":path"] = path,
+                            [":authority"] = authority,
+                            },
+                            "",
+                            5000)
+                          
+                            -- decoding headers returned in body 
+                            local decoded 
+                            success, decoded = pcall(json.decode, body)
+                            if not success or type(decoded) ~= "table" then
+                              request_handle:logErr("Failed json decoding: " .. tostring(body))
+                              request_handle:respond({[":status"] = "500"}, "Internal Server Error")
+                              return
+                            end
+                            
+                            for key,value in pairs (decoded) do
+                              request_handle:logInfo("header -> " .. key .. ": " .. value)
+                              request_handle:headers():add(key,value)
+                            end
+                          
+                            request_handle:logInfo("Initiating Http call to retrieve and verify x-device-id")
+                            local cookie = request_handle:headers():get("cookie")
+                            local path = "/public/device"
+                            local method = "GET"
+                          
+                            -- http call
+                            local headers, body = request_handle:httpCall(
+                            cluster_name,
+                            {
+                            [":method"] = method,
+                            [":path"] = path,
+                            [":authority"] = authority,
+                            ["cookie"] = cookie
+                            },
+                            "",
+                            5000)
+                             local index = 0 
+                             for key, value in pairs(headers) do
+                               if key:lower() == "set-cookie" then
+                                 request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
+                                 request_handle:logInfo("set-cookie header " .. index .. " stored successfully")
+                                 break
+                               end
+                             end
+                            local device_id = body
+                            path = "/devices/" .. device_id
+                            cluster_name = "resource_server"
+                          
+                            local headers, body = request_handle:httpCall(
+                            cluster_name,
+                            {
+                            [":method"] = method,
+                            [":path"] = path,
+                            [":authority"] = authority,
+                            },
+                            "",
+                            5000)
+                            if headers[":status"] == "200" then
+                              request_handle:logInfo("device check -> " ..  body)
+                            else
+                               request_handle:respond({[":status"] = "401"}, "device-id doesnt exist")
+                            end
+                          
+                          	local cookie_header = request_handle:headers():get("cookie") -- copy all headers 
                           	local route = request_handle:headers():get(":path")
                           	local method = "GET"
                             local authority = request_handle:headers():get(":authority")
                           	local cluster_name = "gateway_service"
-                          	if string.find(route, "^/api") or string.find(route, "^/restricted") or string.find(route, "^/devices") then
-                              request_handle:logInfo("Initiating Http Call to retrieve Auth Header triggered by route: " .. route ) 
+                          	if string.find(route, "^/api") or string.find(route, "^/restricted") then
+                              req_id = request_handle:headers():get("x-request-id")
+                              request_handle:logInfo(" ----------------------------------------------------------------")
+                              request_handle:logInfo("request_id: ".. req_id .. " --> Initiating Http Call to retrieve Auth Header triggered by route: " .. route )
                               local path = "/authorize/get/keycloak"
                               local success, headers, body = pcall(request_handle.httpCall, request_handle,
                               cluster_name,
@@ -75,10 +150,9 @@ static_resources:
                                 if headers and headers[":status"] == "500" then
                                   request_handle:logInfo("Internal Server Error --> Check logs on Auth client")
                                 end
-                                request_handle:respond({[":status"] = "401"}, "Authentication required.")
-                                  return
+                                return
                               end
-                              local json = require "json"
+                              
                               local decoded
                               success, decoded = pcall(json.decode, body)
                               if not success or type(decoded) ~= "table" then
@@ -88,43 +162,23 @@ static_resources:
                               end
                           
                           		local accessToken = decoded["accessTokenValue"]
-                          		-- TODO: retrieve all headers returned in body or header and add them 
+                          		-- TODO: retrieve all headers returned in body or header and add them
+                                 -- for key, value in pairs(headers) do
+                                 -- if key:lower() ~= "expires" then
+                                   --  request_handle:logInfo("header= " .. key)
+                                   --  request_handle:headers():add(key , value)
+                                 -- end
+                                -- end
                           		request_handle:headers():add("Authorization", "Bearer " .. accessToken)
-                          
                           	end
-
-                          	if string.find(route, "^/devices") then
-                              request_handle:logInfo("Initiating Http call to retrieve set-cookie")
-                              local cookie = request_handle:headers():get("cookie")
-                              local path = "/public/testing"
-                              local headers, body = request_handle:httpCall(
-                              cluster_name,
-                              {
-                              [":method"] = method,
-                              [":path"] = path,
-                              [":authority"] = authority,
-                              ["cookie"] = cookie
-                              },
-                              "",
-                              5000)
-                              -- in case of retrieving multiple set-cookie headers
-                              local index = 0 
-                              for key, value in pairs(headers) do
-                                if key:lower() == "set-cookie" then
-                                  request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
-                                  request_handle:logInfo("set-cookie header " .. index .. " stored successfully")
-                                  break
-                                end
-                          	  end
-                            end
                           end
-
+                          
                           function envoy_on_response(response_handle)
                             if response_handle:streamInfo():dynamicMetadata():get("envoy.lua") then
                               local set_cookies = response_handle:streamInfo():dynamicMetadata():get("envoy.lua")
                               local index = 0
                           	  while set_cookies["set-cookie-" .. index] do
-                               local set_cookie = set_cookies["set-cookie-" .. index]
+                                set_cookie = set_cookies["set-cookie-" .. index]
                                 response_handle:logInfo("set-cookie header --> " .. set_cookie)
                                 response_handle:headers():add("Set-Cookie" , set_cookie)
                                 index = index + 1
