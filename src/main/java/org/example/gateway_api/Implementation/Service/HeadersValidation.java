@@ -3,8 +3,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ServerWebExchange;
 import java.util.HashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Service
 public class HeadersValidation {
+    private static final Logger logger = LoggerFactory.getLogger(HeadersValidation.class);
     public Map<String, Object> filter(ServerWebExchange exchange) {
         String appVersionKey = exchange.getRequest().getHeaders().getFirst("X-App-Version-Key");
         String referer = exchange.getRequest().getHeaders().getFirst("Referer");
@@ -15,15 +18,15 @@ public class HeadersValidation {
         } else if (host != null) {
             headerData.put("X-App-Id", host);
         } else {
-            System.out.println("Unable to identify source of request.");
+            logger.warn("Unable to identify source of request.{}", exchange.getRequest().getURI());
             return null;
         }
         if (appVersionKey != null) {
-            System.out.println("Mobile version detected.");
+            logger.debug("Mobile version detected.");
             headerData.put("Channel", "MOBILE");
             headerData.put("X-App-Version-Key", appVersionKey);
         } else {
-            System.out.println("Web version detected.");
+            logger.debug("Web version detected.");
             headerData.put("Channel", "WEB");
         }
         return headerData;

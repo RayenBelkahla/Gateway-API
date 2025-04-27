@@ -1,4 +1,6 @@
 package org.example.gateway_api.Implementation.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -18,6 +20,8 @@ import java.util.UUID;
 
 @Service
 public class SessionService {
+    private static final Logger logger = LoggerFactory.getLogger(SessionService.class);
+
     public final ReactiveOAuth2AuthorizedClientManager authorizedClientManager;
     public SessionService(ReactiveOAuth2AuthorizedClientManager authorizedClientManager) {
         this.authorizedClientManager = authorizedClientManager;
@@ -61,11 +65,12 @@ public class SessionService {
                 .defaultIfEmpty(data);
     }
     public Mono<String> verifyDeviceId(ServerWebExchange exchange) {
-        HttpCookie deviceIdValue = exchange.getRequest().getCookies().getFirst("x-device-id");
+        HttpCookie deviceIdValue = exchange.getRequest().getCookies().getFirst("X-Device-Id");
         ResponseCookie responseCookie;
 
         if (deviceIdValue != null) {
-            responseCookie = ResponseCookie.from("x-device-id", deviceIdValue.getValue())
+            logger.debug(" Including Device ID in Set-Cookie header.");
+            responseCookie = ResponseCookie.from("X-Device-Id", deviceIdValue.getValue())
                     .httpOnly(true)
                     .sameSite("Lax")
                     .path("/")
@@ -73,13 +78,15 @@ public class SessionService {
                     .build();
         }
         else if( exchange.getRequest().getHeaders().containsKey("X-App-Version-Key")) {
-                exchange.getResponse().setStatusCode(HttpStatusCode.valueOf(400));
-                return Mono.empty();
+            exchange.getResponse().setStatusCode(HttpStatusCode.valueOf(400));
+            return Mono.empty();
         }
 
         else {
+            logger.debug("Generating new Device ID.");
             UUID uuid = UUID.randomUUID();
-            responseCookie = ResponseCookie.from("x-device-id", uuid.toString())
+            logger.debug("Generating X-Device-Id Set-Cookie header.");
+            responseCookie = ResponseCookie.from("X-Device-Id", uuid.toString())
                     .httpOnly(true)
                     .sameSite("Lax")
                     .path("/")
@@ -87,6 +94,11 @@ public class SessionService {
                     .build();
         }
         exchange.getResponse().getHeaders().add(HttpHeaders.SET_COOKIE, responseCookie.toString());
-        return Mono.just(responseCookie.getValue());
+
+        assert deviceIdValue != null;
+        logger.debug("Saving in session Device ID: {}", deviceIdValue.getValue());
+        return exchange.getSession()
+                .doOnNext(session -> session.getAttributes().put("X-Device-Id", deviceIdValue.getValue()))
+                .thenReturn(deviceIdValue.getValue());
     }
 }

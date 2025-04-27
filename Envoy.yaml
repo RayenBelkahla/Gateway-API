@@ -133,7 +133,7 @@ static_resources:
                               req_id = request_handle:headers():get("x-request-id")
                               request_handle:logInfo(" ----------------------------------------------------------------")
                               request_handle:logInfo("request_id: ".. req_id .. " --> Initiating Http Call to retrieve Auth Header triggered by route: " .. route )
-                              local path = "/authorize/get/keycloak"
+                              local path = "/authorize/get/user-access-client"
                               local success, headers, body = pcall(request_handle.httpCall, request_handle,
                               cluster_name,
                               {
