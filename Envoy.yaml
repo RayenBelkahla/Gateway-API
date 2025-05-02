@@ -21,7 +21,7 @@ static_resources:
                     - name: gateway-service
                       domains: ["*"]
                       routes:
-                        - match: {prefix: "/public"}
+                        - match: {prefix: "/authorization"}
                           route: {cluster: gateway_service}
                           typed_per_filter_config:
                             envoy.filters.http.lua:
@@ -52,7 +52,7 @@ static_resources:
                             
                             request_handle:logInfo("Initiating HTTP Call for App Version parsing")
                             local authority = request_handle:headers():get(":authority")
-                            local path = "/public/headers"
+                            local path = "/authorization/headers"
                             local method = "GET"
                             local cluster_name = "gateway_service"
                           
@@ -83,7 +83,7 @@ static_resources:
                           
                             request_handle:logInfo("Initiating Http call to retrieve and verify x-device-id")
                             local cookie = request_handle:headers():get("cookie")
-                            local path = "/public/device"
+                            local path = "/authorization/device"
                             local method = "GET"
                           
                             -- http call
