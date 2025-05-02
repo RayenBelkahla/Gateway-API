@@ -18,6 +18,7 @@ public class HeadersValidation {
         } else if (host != null) {
             headerData.put("X-App-Id", host);
         } else {
+            System.out.println("Unable to identify source of request");
             logger.warn("Unable to identify source of request.{}", exchange.getRequest().getURI());
             return null;
         }

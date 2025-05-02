@@ -66,8 +66,8 @@ public class SessionService {
     }
     public Mono<String> verifyDeviceId(ServerWebExchange exchange) {
         HttpCookie deviceIdValue = exchange.getRequest().getCookies().getFirst("X-Device-Id");
-        ResponseCookie responseCookie;
 
+        HttpCookie responseCookie;
         if (deviceIdValue != null) {
             logger.debug(" Including Device ID in Set-Cookie header.");
             responseCookie = ResponseCookie.from("X-Device-Id", deviceIdValue.getValue())
@@ -81,8 +81,21 @@ public class SessionService {
             exchange.getResponse().setStatusCode(HttpStatusCode.valueOf(400));
             return Mono.empty();
         }
+        else
+        {
+            responseCookie = generateDeviceId();
+            deviceIdValue = responseCookie;
+        }
+        exchange.getResponse().getHeaders().add(HttpHeaders.SET_COOKIE, responseCookie.toString());
+        logger.debug("Saving Device ID in session : {}", deviceIdValue.getValue());
+        HttpCookie finalDeviceIdValue = deviceIdValue;
+        return exchange.getSession()
+                .doOnNext(session -> session.getAttributes().put("X-Device-Id", finalDeviceIdValue.getValue()))
+                .thenReturn(deviceIdValue.getValue());
+    }
 
-        else {
+    public HttpCookie generateDeviceId(){
+            HttpCookie responseCookie;
             logger.debug("Generating new Device ID.");
             UUID uuid = UUID.randomUUID();
             logger.debug("Generating X-Device-Id Set-Cookie header.");
@@ -92,13 +105,7 @@ public class SessionService {
                     .path("/")
                     .maxAge(36000000)
                     .build();
-        }
-        exchange.getResponse().getHeaders().add(HttpHeaders.SET_COOKIE, responseCookie.toString());
 
-        assert deviceIdValue != null;
-        logger.debug("Saving in session Device ID: {}", deviceIdValue.getValue());
-        return exchange.getSession()
-                .doOnNext(session -> session.getAttributes().put("X-Device-Id", deviceIdValue.getValue()))
-                .thenReturn(deviceIdValue.getValue());
+        return responseCookie;
     }
 }

@@ -2,6 +2,7 @@ package org.example.gateway_api.Implementation.Config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+//import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
@@ -14,6 +15,8 @@ import org.springframework.security.oauth2.client.web.server.ServerOAuth2Authori
 import org.springframework.security.oauth2.client.web.server.WebSessionServerOAuth2AuthorizedClientRepository;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.WebSessionServerSecurityContextRepository;
+// import reactor.core.publisher.Mono;
+// import java.net.URI;
 
 
 @Configuration
@@ -24,7 +27,7 @@ public class SecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/public/**").permitAll()
+                        .pathMatchers("/authorization/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2Client(Customizer.withDefaults())
@@ -34,6 +37,25 @@ public class SecurityConfig {
                             return response.setComplete();
                         })
                 )
+                // required for clean keycloak authentication by returning redirect-uri
+                /*.exceptionHandling(e -> e
+                        .authenticationEntryPoint((exchange, ex) -> {
+
+                            if(!exchange.getRequest().getHeaders().containsKey("X-App-Version-Key"))
+                            {
+                                 String originalUri = exchange.getRequest().getURI().toString();
+                                return exchange.getSession().flatMap(session -> {
+                                    session.getAttributes().put("REDIRECT_URI", originalUri);
+                                    exchange.getResponse().setStatusCode(HttpStatus.SEE_OTHER);
+                                    exchange.getResponse().getHeaders().setLocation(URI.create("/authorization/redirect-uri"));
+                                    return exchange.getResponse().setComplete();
+                                });
+                            }
+                            return Mono.empty();
+
+                        })
+                )*/
+
                 .securityContextRepository(new WebSessionServerSecurityContextRepository())
                 .build();
     }

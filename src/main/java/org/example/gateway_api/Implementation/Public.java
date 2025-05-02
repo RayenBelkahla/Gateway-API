@@ -8,12 +8,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebSession;
 import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/public")
+@RequestMapping("/authorization")
 public class Public {
     public final HeadersValidation headerValidator;
     public final SessionService sessionService;
@@ -21,6 +23,16 @@ public class Public {
     public Public(SessionService sessionService, HeadersValidation headerValidator) {
         this.sessionService = sessionService;
         this.headerValidator = headerValidator;
+    }
+    @GetMapping("/redirect-uri")
+    public Mono<Map<String,Object>> redirectUri(ServerWebExchange exchange)
+    {   Map<String,Object> data = new HashMap<>();
+        data.put("redirectUri",exchange.getSession().flatMap(
+                session -> Mono.justOrEmpty(session.getAttribute("redirectUri"))
+        ));
+        return Mono.just(data);
+
+
     }
     @GetMapping("/device")
     public Mono<String> testing(ServerWebExchange exchange) {
@@ -35,7 +47,10 @@ public class Public {
     public Mono<Map<String, Object>> getHeaders(ServerWebExchange exchange) {
         return Mono.just(headerValidator.filter(exchange));
     }
-
+    @GetMapping("/session")
+    public Mono<WebSession> getSessionAttributes(ServerWebExchange exchange) {
+        return sessionService.getSessionAttributes(exchange);
+    }
 
 
 }
