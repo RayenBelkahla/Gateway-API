@@ -1,10 +1,16 @@
+admin:
+  access_log_path: /tmp/envoy_admin_access.log
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 9901
 static_resources:
   listeners:
     - name: default
       address:
         socket_address:
           address: 0.0.0.0
-          port_value: 9901
+          port_value: 9990
       filter_chains:
         - filters:
             - name: envoy.filters.network.http_connection_manager
@@ -17,18 +23,16 @@ static_resources:
                     - header:
                         key: X-Forwarded-Port
                         value: "%DOWNSTREAM_LOCAL_PORT%"
+                  response_headers_to_add:
+                        - header:
+                            key: Accept-CH
+                            value: Sec-CH-UA-Mobile
                   virtual_hosts:
                     - name: gateway-service
                       domains: ["*"]
                       routes:
-                        - match: {prefix: "/authorization"}
+                        - match: {prefix: "/configuration"}
                           route: {cluster: gateway_service}
-                          typed_per_filter_config:
-                            envoy.filters.http.lua:
-                              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.LuaPerRoute
-                              source_code:
-                                inline_string: |
-
                         - match: { prefix: "/authorize" }
                           route: { cluster: gateway_service}
                         - match: { prefix: "/login"}
@@ -41,6 +45,8 @@ static_resources:
                           route: { cluster: resource_server}
                         - match: {prefix: "/devices"}
                           route: {cluster: resource_server}
+                        - match: {prefix: "/bankerise-platform"}
+                          route: {cluster: bankerise_backend}
                 http_filters:
                   - name: envoy.filters.http.lua
                     typed_config:
@@ -52,11 +58,11 @@ static_resources:
                             
                             request_handle:logInfo("Initiating HTTP Call for App Version parsing")
                             local authority = request_handle:headers():get(":authority")
-                            local path = "/authorization/headers"
+                            local path = "/configuration/app-headers" -- 1 returns x-app-id, channel + x-app-version-key when provided 
                             local method = "GET"
                             local cluster_name = "gateway_service"
                           
-                            -- http call
+                            -- http call retrieving headers from gateway_service
                             local headers, body = request_handle:httpCall(
                             cluster_name,
                             {
@@ -81,9 +87,9 @@ static_resources:
                               request_handle:headers():add(key,value)
                             end
                           
-                            request_handle:logInfo("Initiating Http call to retrieve and verify x-device-id")
+                            request_handle:logInfo("Initiating Http call to retrieve and verify x-device-id") -- 2 
                             local cookie = request_handle:headers():get("cookie")
-                            local path = "/authorization/device"
+                            local path = "/configuration/device"
                             local method = "GET"
                           
                             -- http call
@@ -97,14 +103,19 @@ static_resources:
                             },
                             "",
                             5000)
-                             local index = 0 
-                             for key, value in pairs(headers) do
-                               if key:lower() == "set-cookie" then
-                                 request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
-                                 request_handle:logInfo("set-cookie header " .. index .. " stored successfully")
-                                 break
-                               end
-                             end
+                            if headers[":status"] == "400" then -- Warning This is needed 
+                              request_handle:logInfo("mobile device doesnt contain x-device-id cookie request rejected.")
+                              return
+                            end   
+                            local index = 0 
+                            for key, value in pairs(headers) do
+                              if key:lower() == "set-cookie" then
+                                request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
+                                request_handle:logInfo("set-cookie header " .. index .. " stored successfully")
+                                break
+                              end
+                            end
+                            request_handle:logInfo("Verifying Device-Id existence in resource server backend") -- Warning this must be included following the process 
                             local device_id = body
                             path = "/devices/" .. device_id
                             cluster_name = "resource_server"
@@ -120,11 +131,81 @@ static_resources:
                             5000)
                             if headers[":status"] == "200" then
                               request_handle:logInfo("device check -> " ..  body)
-                            else
-                               request_handle:respond({[":status"] = "401"}, "device-id doesnt exist")
-                            end
+                              local device_info = tostring(body)
+                              if body == "null" then
+                                request_handle:logErr("Device doesn't exist. Returned: " .. tostring(body))
+                                request_handle:logInfo("Generating DeviceId and posting DeviceInfo to RS")
+                            
+                                -- http Call to create new Device info
+                              
+                                local cluster = "gateway_service"
+                                local authority = request_handle:headers():get(":authority")
+                                local UA = request_handle:headers():get("user-agent")
+                                local cookie = request_handle:headers():get("cookie")
+                                local channel = request_handle:headers():get("channel")
+                                local create_path = "/device-management/create/device"
+                                local create_headers = {
+                                [":method"] = "GET",
+                                [":path"] = create_path,
+                                [":authority"] = authority,
+                                ["cookie"] = cookie,
+                                ["user-agent"] = UA,
+                                ["channel"] = channel
+                                }
+                            
+                                local create_resp_headers, create_body = request_handle:httpCall(
+                                cluster,
+                                create_headers,
+                                "",
+                                5000
+                                )
+                                -- http Call to save device Info in Resource Server
+                                local device_info = tostring(create_body)
+                                request_handle:logInfo("Device created: " .. device_info)
+                                local cluster = "resource_server"
+                                local save_path = "/devices/save"
+                                local save_headers = {
+                                [":method"] = "POST",
+                                [":path"] = save_path,
+                                [":authority"] = authority,
+                                ["cookie"] = cookie,
+                                ["user-agent"] = UA,
+                                ["content-type"] = "application/json"
+                                }
+                            
+                                local save_resp_headers, save_resp_body = request_handle:httpCall(
+                                cluster,
+                                save_headers,
+                                device_info,
+                                5000
+                                )
+                                request_handle:logInfo("Device info saved in RS. Response: " .. tostring(save_resp_body))
                           
-                          	local cookie_header = request_handle:headers():get("cookie") -- copy all headers 
+                                
+                                return
+                              end
+                              -- Http Call to save Device Info in Session
+                              request_handle:logInfo("saving device info in session")
+                              local cluster = "gateway_service"
+                              local path = "/device-management/save/device"
+                              local headers, body = request_handle:httpCall(
+                              cluster,
+                              {
+                              ["cookie"] = cookie,
+                              [":method"] = "GET",
+                              [":path"] = path,
+                              [":authority"] = authority,
+                              ["content-type"] = "application/json"
+                              },
+                              tostring(device_info),
+                              5000)
+                              request_handle:logInfo("device-management/save/device status -> " .. tostring(headers[":status"]))  
+                      
+                            else
+                              request_handle:logInfo("Unable to access RS, verify connection")
+                            end
+                            -- copy all headers 
+                          	local cookie_header = request_handle:headers():get("cookie") 
                           	local route = request_handle:headers():get(":path")
                           	local method = "GET"
                             local authority = request_handle:headers():get(":authority")
@@ -133,7 +214,7 @@ static_resources:
                               req_id = request_handle:headers():get("x-request-id")
                               request_handle:logInfo(" ----------------------------------------------------------------")
                               request_handle:logInfo("request_id: ".. req_id .. " --> Initiating Http Call to retrieve Auth Header triggered by route: " .. route )
-                              local path = "/authorize/get/user-access-client"
+                              local path = "/configuration/attributes/user-access-client" -- this is the route that will contain all headers 
                               local success, headers, body = pcall(request_handle.httpCall, request_handle,
                               cluster_name,
                               {
@@ -162,13 +243,14 @@ static_resources:
                               end
                           
                           		local accessToken = decoded["accessTokenValue"]
+                                local headerTable = decoded["additionalHeaders"]
                           		-- TODO: retrieve all headers returned in body or header and add them
-                                 -- for key, value in pairs(headers) do
-                                 -- if key:lower() ~= "expires" then
-                                   --  request_handle:logInfo("header= " .. key)
-                                   --  request_handle:headers():add(key , value)
-                                 -- end
-                                -- end
+                                for key, value in pairs(headerTable) do
+                                  if key:lower() ~= "host" then 
+                                    request_handle:logInfo("header = " .. key .. ": " .. value)
+                                    request_handle:headers():add(key , value)
+                                  end
+                                end
                           		request_handle:headers():add("Authorization", "Bearer " .. accessToken)
                           	end
                           end
@@ -216,3 +298,16 @@ static_resources:
                     socket_address:
                       address: localhost
                       port_value: 8085
+    - name: bankerise_backend
+      connect_timeout: 5s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: bankerise_backend
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: 169.255.70.164
+                      port_value: 80

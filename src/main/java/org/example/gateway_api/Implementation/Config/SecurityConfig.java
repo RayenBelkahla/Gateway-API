@@ -15,9 +15,6 @@ import org.springframework.security.oauth2.client.web.server.ServerOAuth2Authori
 import org.springframework.security.oauth2.client.web.server.WebSessionServerOAuth2AuthorizedClientRepository;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.WebSessionServerSecurityContextRepository;
-// import reactor.core.publisher.Mono;
-// import java.net.URI;
-
 
 @Configuration
 @EnableWebFluxSecurity
@@ -27,7 +24,9 @@ public class SecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/authorization/**").permitAll()
+                        .pathMatchers("/configuration/**").permitAll()
+                        .pathMatchers("/device-management/**").permitAll()
+                        .pathMatchers("/app-versions/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2Client(Customizer.withDefaults())
@@ -55,7 +54,6 @@ public class SecurityConfig {
 
                         })
                 )*/
-
                 .securityContextRepository(new WebSessionServerSecurityContextRepository())
                 .build();
     }

@@ -1,5 +1,6 @@
 server:
   forward-headers-strategy: framework
+  port: 8082
 
 spring:
   security:
@@ -11,13 +12,13 @@ spring:
             client-secret: 9HiG9RCeWM8uQuz1eBV5hYGRCwwFzAFu
             provider: keycloak
             authorization-grant-type: authorization_code
-            redirect-uri: "{baseUrl}/login/oauth2/code/keycloak"
-            scope: openid
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: openid, profile, email
           gateway-client:
             client-id: gateway-client-id
             authorization-grant-type: client_credentials
             client-secret: vSPS7vk9nqcHhlfUjprskzC1d9L4lJHQ
-            scope: openid, profile, email
+            scope: openid
             provider: keycloak
         provider:
           keycloak:

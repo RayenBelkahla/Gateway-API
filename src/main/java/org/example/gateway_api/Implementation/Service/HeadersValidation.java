@@ -1,35 +1,44 @@
 package org.example.gateway_api.Implementation.Service;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ServerWebExchange;
-import java.util.HashMap;
-import java.util.Map;
+
+import org.example.gateway_api.Implementation.Components.CustomHeadersManipulation;
+import org.example.gateway_api.Implementation.Enum.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.util.HashMap;
+import java.util.Map;
+
 @Service
 public class HeadersValidation {
     private static final Logger logger = LoggerFactory.getLogger(HeadersValidation.class);
-    public Map<String, Object> filter(ServerWebExchange exchange) {
-        String appVersionKey = exchange.getRequest().getHeaders().getFirst("X-App-Version-Key");
-        String referer = exchange.getRequest().getHeaders().getFirst("Referer");
-        String host = exchange.getRequest().getHeaders().getFirst("Host");
+    public CustomHeadersManipulation customHeadersManipulation;
+
+    public HeadersValidation(CustomHeadersManipulation customHeadersManipulation) {
+        this.customHeadersManipulation = customHeadersManipulation;
+    }
+
+
+
+    public Mono<Map<String, Object>> buildHeaderData(ServerWebExchange exchange) {
         Map<String, Object> headerData = new HashMap<>();
-        if (referer != null) {
-            headerData.put("X-App-Id", referer);
-        } else if (host != null) {
-            headerData.put("X-App-Id", host);
-        } else {
-            System.out.println("Unable to identify source of request");
-            logger.warn("Unable to identify source of request.{}", exchange.getRequest().getURI());
+
+        String appId = customHeadersManipulation.determineAppId(exchange);
+        if (appId == null) {
             return null;
         }
-        if (appVersionKey != null) {
-            logger.debug("Mobile version detected.");
-            headerData.put("Channel", "MOBILE");
-            headerData.put("X-App-Version-Key", appVersionKey);
-        } else {
-            logger.debug("Web version detected.");
-            headerData.put("Channel", "WEB");
+
+        headerData.put("X-App-Id", appId);
+
+        Channel channel = customHeadersManipulation.determineChannel(exchange);
+        headerData.put("Channel", channel.name());
+
+        if (channel == Channel.MOBILE) {
+            String version = customHeadersManipulation.extractAppVersionKey(exchange);
+            headerData.put("X-App-Version-Key", version);
         }
-        return headerData;
+        return Mono.justOrEmpty(headerData);
     }
 }

@@ -1,4 +1,4 @@
-package org.example.gateway_api.Implementation;
+package org.example.gateway_api.Implementation.Controller;
 import org.example.gateway_api.Implementation.Service.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -25,10 +25,10 @@ public class SessionController {
 
     @GetMapping("/session-data")
     public Mono<WebSession> getSessionAttributes(ServerWebExchange exchange) {
-        return sessionService.getSessionAttributes(exchange);
+        return sessionService.getMainSessionAttributes(exchange);
     }
-    @GetMapping("/get/{attribute}")
-    public Mono<Map<String, Object>> getSession(@PathVariable String attribute ,ServerWebExchange exchange) {
-        return sessionService.getSession(attribute, exchange);
+    @GetMapping("/get/{clientRegId}")
+    public Mono<Map<String, Object>> getSession(@PathVariable String clientRegId, ServerWebExchange exchange) {
+        return sessionService.getSession(clientRegId, exchange);
     }
 }
