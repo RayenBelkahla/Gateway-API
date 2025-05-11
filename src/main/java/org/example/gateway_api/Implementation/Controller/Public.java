@@ -1,7 +1,6 @@
 package org.example.gateway_api.Implementation.Controller;
 
 import org.example.gateway_api.Implementation.Enum.Channel;
-import org.example.gateway_api.Implementation.Objects.AppInfo;
 import org.example.gateway_api.Implementation.Service.AppVersionService;
 import org.example.gateway_api.Implementation.Service.HeadersValidation;
 import org.example.gateway_api.Implementation.Service.SessionService;

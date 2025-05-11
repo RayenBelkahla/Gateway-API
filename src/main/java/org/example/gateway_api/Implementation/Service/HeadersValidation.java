@@ -13,7 +13,6 @@ import java.util.Map;
 
 @Service
 public class HeadersValidation {
-    private static final Logger logger = LoggerFactory.getLogger(HeadersValidation.class);
     public CustomHeadersManipulation customHeadersManipulation;
 
     public HeadersValidation(CustomHeadersManipulation customHeadersManipulation) {
