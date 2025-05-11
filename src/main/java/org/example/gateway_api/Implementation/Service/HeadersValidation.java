@@ -2,12 +2,9 @@ package org.example.gateway_api.Implementation.Service;
 
 import org.example.gateway_api.Implementation.Components.CustomHeadersManipulation;
 import org.example.gateway_api.Implementation.Enum.Channel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-
 import java.util.HashMap;
 import java.util.Map;
 
