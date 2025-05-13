@@ -55,8 +55,10 @@ static_resources:
                         inline_string: |
                           function envoy_on_request(request_handle)
                               local json = require "json"
-                              request_handle:logInfo("Initiating HTTP Call for App Version parsing")
-
+                              local request_id = request_handle:headers():get("x-request-id")
+                              request_handle:logInfo("-------------- Request Id: " .. request_id .. " --------------")
+                          
+                              request_handle:logInfo("Initiating HTTP Call for App Version parsing.")
                               local authority = request_handle:headers():get(":authority")
                               local method = "GET"
                               local cluster_name = "gateway_service"
@@ -77,13 +79,13 @@ static_resources:
 
                               -- Handle mobile device missing cookie
                               if headers[":status"] == "400" then 
-                                  request_handle:logInfo("mobile device doesnt contain x-device-id cookie request rejected.")
-                                   -- request_handle:respond(
+                                  request_handle:logInfo("Mobile device doesn't contain x-device-id cookie, request rejected.")
+                                  request_handle:respond({
+                                    [":status"] = "400"
+                                  }, "BAD REQUEST -- Device Id Missing\n")
                                   return
                               end
-                                
-                                
-                              -- store set-cookie header into dynamic metadata
+                          
                               local index = 0
                               for key, value in pairs(headers) do
                                   if key:lower() == "set-cookie" then
@@ -93,7 +95,7 @@ static_resources:
                                   end
                               end
 
-                              -- decoding JSON response for headers and device id
+                              -- decoding json for headers and device id
                               local decoded
                               local success
                               success, decoded = pcall(json.decode, body)
@@ -102,21 +104,18 @@ static_resources:
                                   request_handle:respond({[":status"] = "500"}, "Internal Server Error")
                                   return
                               end
-
-                              -- Process the headers (app version fields, channel, x-app-version-key, etc.)
+                              local ignore = {
+                              host                      = true,
+                              accesstokenvalue          = true,
+                              ["x-app-version-blocked"] = true,
+                              notificationtext          = true,
+                              }
+  
                               for key, value in pairs(decoded) do
-                                if key:lower() ~= "host" or "accesstokenvalue" or "x-device-id" or "x-app-version-blocked" or "notificationtext" then
-                                  if key:lower() == "additionalheaders" then
-                                    success, addHeaderDecoder = pcall(json.encode, value)
-                                    request_handle:logInfo("what?? -> ", addHeaderDecoder)
-                                    for K, V in pairs(addHeaderDecoder) do
-                                        request_handle:logInfo("header -> " .. K .. ": " .. V)
-                                        request_handle:headers():add(K, V)
-                                    end
-                                  else
-                                    request_handle:logInfo("header -> " .. key .. ": " .. value)
-                                      request_handle:headers():add(key, value)
-                                  end
+                                if not ignore[key:lower()] then
+                                  request_handle:logInfo("header -> " .. key .. ": " .. value)
+                          
+                                  request_handle:headers():add(key, value)
                                 end
                               end
                               local appVersion = decoded["X-App-Version-Blocked"]
@@ -129,22 +128,21 @@ static_resources:
                               end
                               if notificationText then 
                                 request_handle:logInfo("Notification")
-                                  request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "NotificationText" ,notificationText)
-                                  local status = request_handle:streamInfo():dynamicMetadata():get("envoy.lua")["X-App-Version-Blocked"]
-                                    if tostring(status) == "True" then 
+                                request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "NotificationText" ,notificationText)
+                                local status = request_handle:streamInfo():dynamicMetadata():get("envoy.lua")["X-App-Version-Blocked"]
+                                  if tostring(status) == "True" then 
                                     request_handle:logErr("BLOCKED VERSION --> Rejecting Request ")
                                     request_handle:respond({
-                                      [":status"] = "403",
-                                      ["content-type"] = "text/plain",
-                                      ["X-app-Version-Blocked"] = True  
-                                    }, "Forbidden\n" .. "NotificationText: " .. tostring(notificationText))
-                                  end
-                              -- Handle Authorization
-                              local accessToken = decoded["accessTokenValue"]
+                                    [":status"] = "403",
+                                    ["content-type"] = "text/plain",
+                                    ["X-app-Version-Blocked"] = True  
+                                  }, "Forbidden\n" .. "NotificationText: " .. tostring(notificationText))
+                                  end 
+                              end
+                               local accessToken = decoded["accessTokenValue"]
                               if accessToken then
                                   request_handle:headers():add("Authorization", "Bearer " .. accessToken)
                                   request_handle:logInfo("Authorization header added successfully.")
-                              end
                               end
                               request_handle:logInfo("Verifying Device-Id existence in resource server backend")
                               local device_id = decoded["X-Device-Id"]
