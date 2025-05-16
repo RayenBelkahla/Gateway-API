@@ -4,6 +4,9 @@ import org.example.gateway_api.Implementation.Objects.AppInfo;
 import org.example.gateway_api.Implementation.Service.AppVersionService;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
+
 @RestController
 @RequestMapping("/app-versions")
 public class AppVersionsController {
@@ -13,13 +16,10 @@ public class AppVersionsController {
         this.appVersionService = appVersionService;
 
     }
-    @SuppressWarnings("JvmTaintAnalysis")
     @PostMapping("/save")
-    public void saveAppVersions(@RequestBody String versionsJson) {
-        appVersionService.saveAppVersions(versionsJson);
-        System.out.println("saved app versions");
+    public void save(@RequestBody List<AppInfo> appInfo) {
+        appVersionService.saveAppVersions(appInfo);
     }
-
     @GetMapping("/all")
     public Mono<AppInfo[]> getAllAppVersions() {
         return Mono.justOrEmpty(appVersionService.getAllAppVersions().toArray(new AppInfo[0]));

@@ -1,5 +1,6 @@
 package org.example.gateway_api.Implementation.Components;
 
+import org.example.gateway_api.Implementation.Objects.Variables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpCookie;
@@ -9,17 +10,13 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-
 import java.util.UUID;
 
 @Component
 public class DeviceProvisioning {
 
     private static final Logger logger = LoggerFactory.getLogger(DeviceProvisioning.class);
-    private static final String DEVICE_ID = "X-Device-Id";
-    private static final String APP_VERSION_KEY = "X-App-Version-Key";
 
-    // main method
     public Mono<String> addDeviceId(ServerWebExchange exchange) {
         if (isInvalidMobileRequest(exchange)) {
             exchange.getResponse().setStatusCode(HttpStatusCode.valueOf(400));
@@ -32,12 +29,12 @@ public class DeviceProvisioning {
     }
 
     private boolean isInvalidMobileRequest(ServerWebExchange exchange) {
-        return exchange.getRequest().getCookies().getFirst(DEVICE_ID) == null
-                && exchange.getRequest().getHeaders().containsKey(APP_VERSION_KEY);
+        return exchange.getRequest().getCookies().getFirst(Variables.X_DEVICE_ID) == null
+                && exchange.getRequest().getHeaders().containsKey(Variables.X_APP_VERSION_KEY);
     }
 
     public String retrieveDeviceId(ServerWebExchange exchange) {
-        HttpCookie deviceIdCookie = exchange.getRequest().getCookies().getFirst(DEVICE_ID);
+        HttpCookie deviceIdCookie = exchange.getRequest().getCookies().getFirst(Variables.X_DEVICE_ID);
         if (deviceIdCookie != null) {
             logger.debug("Device ID found in cookie: {}", deviceIdCookie.getValue());
             return deviceIdCookie.getValue();
@@ -50,13 +47,13 @@ public class DeviceProvisioning {
             return retrieveDeviceId(exchange);
         }
 
-        String generatedId = generateDeviceId();
+        String generatedId = generateDeviceId(exchange);
         logger.info("Generated new Device ID: {}", generatedId);
         return generatedId;
     }
 
     private void setDeviceIdCookie(ServerWebExchange exchange, String deviceId) {
-        ResponseCookie cookie = ResponseCookie.from(DEVICE_ID, deviceId)
+        ResponseCookie cookie = ResponseCookie.from(Variables.X_DEVICE_ID, deviceId)
                 .httpOnly(true)
                 .sameSite("Lax")
                 .path("/")
@@ -69,14 +66,15 @@ public class DeviceProvisioning {
     private Mono<String> saveDeviceIdInSession(ServerWebExchange exchange, String deviceId) {
         return exchange.getSession()
                 .doOnNext(session -> {
-                    session.getAttributes().put(DEVICE_ID, deviceId);
+                    session.getAttributes().put(Variables.X_DEVICE_ID, deviceId);
                     logger.debug("Device ID stored in session: {}", deviceId);
                 })
                 .thenReturn(deviceId);
     }
-    private String generateDeviceId() {
+    public String generateDeviceId(ServerWebExchange exchange) {
         logger.info("Generating new Id.");
-        return UUID.randomUUID().toString();
+        String deviceId = UUID.randomUUID().toString();
+        setDeviceIdCookie(exchange, deviceId);
+        return deviceId;
     }
-
 }

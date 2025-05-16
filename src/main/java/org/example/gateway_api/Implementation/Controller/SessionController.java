@@ -1,6 +1,6 @@
 package org.example.gateway_api.Implementation.Controller;
+import org.example.gateway_api.Implementation.Components.CacheGatewayTokenManager;
 import org.example.gateway_api.Implementation.Service.SessionService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -12,11 +12,11 @@ import java.util.Map;
 @RestController
 @RequestMapping("/authorize")
 public class SessionController {
-
     public final SessionService sessionService;
-    @Autowired
-    public SessionController(SessionService sessionService) {
+    public final CacheGatewayTokenManager cacheManager;
+    public SessionController(SessionService sessionService,CacheGatewayTokenManager cacheManager) {
         this.sessionService = sessionService;
+        this.cacheManager = cacheManager;
     }
     @GetMapping("/user")
     public Mono<OAuth2AuthenticatedPrincipal> getAuthenticatedPrincipal(@AuthenticationPrincipal OAuth2AuthenticatedPrincipal principal) {
@@ -31,4 +31,5 @@ public class SessionController {
     public Mono<Map<String, Object>> getSession(@PathVariable String clientRegId, ServerWebExchange exchange) {
         return sessionService.getSession(clientRegId, exchange);
     }
+
 }

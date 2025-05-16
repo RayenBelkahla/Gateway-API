@@ -15,9 +15,16 @@ import java.util.Map;
 @Component
 public class OAuthSession {
     private final ReactiveOAuth2AuthorizedClientManager authorizedClientManager;
-
-    public OAuthSession(ReactiveOAuth2AuthorizedClientManager authorizedClientManager) {
+    private final CacheGatewayTokenManager tokenManager;
+    public OAuthSession(ReactiveOAuth2AuthorizedClientManager authorizedClientManager, CacheGatewayTokenManager tokenManager) {
         this.authorizedClientManager = authorizedClientManager;
+        this.tokenManager = tokenManager;
+    }
+    public Mono<String> getGwToken()
+    {
+        return tokenManager
+                .getAccessToken("keycloak")
+                .map(OAuth2AccessToken::getTokenValue);
     }
 
     public Mono<Map<String, Object>> getSession(String clientId, ServerWebExchange exchange) {
@@ -45,9 +52,10 @@ public class OAuthSession {
                         }
                     }
 
-
                     return data;
                 })
                 .defaultIfEmpty(data);
     }
+
+
 }

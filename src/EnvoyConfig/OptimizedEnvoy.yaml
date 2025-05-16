@@ -31,6 +31,8 @@ static_resources:
                     - name: gateway-service
                       domains: ["*"]
                       routes:
+                        - match: {prefix: "/public"}
+                          route: {cluster: bankerise_backend}
                         - match: {prefix: "/configuration"}
                           route: {cluster: gateway_service}
                         - match: { prefix: "/authorize" }
@@ -41,8 +43,8 @@ static_resources:
                           route: { cluster: gateway_service}
                         - match: { prefix: "/api"}
                           route: { cluster: resource_server}
-                        - match: { prefix: "/restricted"}
-                          route: { cluster: resource_server}
+                        - match: { prefix: "/authorization"}
+                          route: { cluster: bankerise_backend}
                         - match: {prefix: "/devices"}
                           route: {cluster: resource_server}
                         - match: {prefix: "/bankerise-platform"}
@@ -54,202 +56,234 @@ static_resources:
                       default_source_code:
                         inline_string: |
                           function envoy_on_request(request_handle)
-                              local json = require "json"
-                              local request_id = request_handle:headers():get("x-request-id")
-                              request_handle:logInfo("-------------- Request Id: " .. request_id .. " --------------")
-                          
-                              request_handle:logInfo("Initiating HTTP Call for App Version parsing.")
-                              local authority = request_handle:headers():get(":authority")
-                              local method = "GET"
-                              local cluster_name = "gateway_service"
-                              local cookie = request_handle:headers():get("cookie")
-                              local versionKey = request_handle:headers():get("X-App-Version-Key")
-                              local path = "/configuration/attributes/user-access-client"
-                              local headers, body = request_handle:httpCall(
-                                  cluster_name,
-                                  {   ["X-App-Version-Key"] = versionKey,
-                                      [":method"] = method,
-                                      [":path"] = path,
-                                      [":authority"] = authority,
-                                      ["cookie"] = cookie
-                                  },
-                                  "",
-                                  5000
-                              )
+                                local json = require "json"
 
-                              -- Handle mobile device missing cookie
-                              if headers[":status"] == "400" then 
-                                  request_handle:logInfo("Mobile device doesn't contain x-device-id cookie, request rejected.")
-                                  request_handle:respond({
-                                    [":status"] = "400"
-                                  }, "BAD REQUEST -- Device Id Missing\n")
+                                local request_id = request_handle:headers():get("x-request-id")
+                                request_handle:logInfo("-------------- Request Id: " .. request_id .. " --------------")
+                                local appId = request_handle:headers():get("X-App-Id")
+                                request_handle:logInfo("Initiating HTTP Call to retrieve essential headers.")
+                                local authority = request_handle:headers():get(":authority")
+                                local method = "GET"
+                                local cluster_name = "gateway_service"
+                                local cookie = request_handle:headers():get("cookie")
+                                local versionKey = request_handle:headers():get("X-App-Version-Key")
+                                local path = "/configuration/attributes/user-access-client"
+
+                                local headers, body = request_handle:httpCall(
+                                    cluster_name,
+                                    {   ["X-App-Version-Key"] = versionKey,
+                                        [":method"] = method,
+                                        [":path"] = path,
+                                        [":authority"] = authority,
+                                        ["cookie"] = cookie,
+                                        ["X-App-ID"] = appId
+                                    },
+                                    "",
+                                    5000
+                                     )
+
+                                -- Handle mobile device missing cookie
+                                if headers[":status"] == "400" then 
+                                    request_handle:logInfo("Mobile device doesn't contain x-device-id cookie, request rejected.")
+                                    request_handle:respond({
+                                      [":status"] = "400"
+                                    }, "BAD REQUEST -- Device Id Missing\n")
+                                    return
+                                end
+                                if headers[":status"] ~= "200" then
+                                  request_handle:logErr("Error retrieving essential headers, STATUS: " .. headers[":status"])
                                   return
-                              end
-                          
-                              local index = 0
-                              for key, value in pairs(headers) do
-                                  if key:lower() == "set-cookie" then
-                                      request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
-                                      request_handle:logInfo("set-cookie header " .. index .. " stored successfully")
-                                      break
+                                end
+
+                                -- decoding json for headers and device id
+                                local decoded
+                                local success
+                                success, decoded = pcall(json.decode, body)
+                                if not success or type(decoded) ~= "table" then
+                                    request_handle:logErr("Failed json decoding: " .. tostring(body))
+                                    request_handle:respond({[":status"] = "500"}, "Internal Server Error")
+                                    return
+                                end
+                                local bkrToken = "Bearer " .. decoded["GwTokenValue"]
+                                local bkrAuthority = "showcase-retail-api.pres.proxym-it.net"
+                                local ignore = {
+                                  host                      = true,
+                                  accesstokenvalue          = true,
+                                  ["x-app-version-blocked"] = true,
+                                  notificationtext          = true,
+                                  gwtokenvalue              = true,
+                                  ["x-app-id"]              = true,
+                                  ["x-app-version-key"]     = true,
+                                  channel                   = true,
+                                }
+                                local index = 1
+                                for key, value in pairs(headers) do
+                                    if key:lower() == "set-cookie" then
+                                        if string.find(value:lower(),"x-device-id",1,true) then 
+                                          request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-0", value)
+                                          request_handle:logInfo("x device id value: " ..value)
+                                          break
+                                        end
+                                        request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
+                                        request_handle:logInfo("set-cookie header " .. index .. " stored successfully, Cookie: " .. value)
+                                        break
+                                    end
+                                end
+                                for key, value in pairs(decoded) do
+                                  if not ignore[key:lower()] then
+                                    request_handle:logInfo("header -> " .. key .. ": " .. value)
+
+                                    request_handle:headers():add(key, value)
                                   end
-                              end
+                                end
+                                local appVersion = decoded["X-App-Version-Blocked"]
+                                local notificationText = decoded["NotificationText"]
+                                if appVersion then
+                                  request_handle:logInfo("Verifying App Version validity. ")
+                                  request_handle:streamInfo():dynamicMetadata():set("envoy.lua","X-App-Version-Blocked",appVersion)
+                                  local status = request_handle:streamInfo():dynamicMetadata():get("envoy.lua")["X-App-Version-Blocked"]
+                                  request_handle:logInfo("status ? :" .. status)
+                                end
+                                if notificationText then 
+                                  request_handle:logInfo("Notification")
+                                  request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "NotificationText" ,notificationText)
+                                  local status = request_handle:streamInfo():dynamicMetadata():get("envoy.lua")["X-App-Version-Blocked"]
+                                    if tostring(status) == "True" then 
+                                      request_handle:logErr("BLOCKED VERSION --> Rejecting Request ")
+                                      request_handle:respond({
+                                      [":status"] = "403",
+                                      ["content-type"] = "text/plain",
+                                      ["X-app-Version-Blocked"] = True  
+                                    }, "Forbidden\n" .. "NotificationText: " .. tostring(notificationText))
+                                    end 
+                                end
+                                 local accessToken = decoded["accessTokenValue"]
+                                if accessToken then
+                                    request_handle:headers():add("Authorization", "Bearer " .. accessToken)
+                                    request_handle:logInfo("Authorization header added successfully.")
+                                end
+                                request_handle:logInfo("Verifying Device-Id existence in resource server backend")
+                                local device_id = decoded["X-Device-Id"]
+                                local channel = decoded["Channel"]
+                                request_handle:logInfo("channel : " .. channel)
+                                local verify_path = "/bankerise-platform/configuration/gw/device/" .. device_id
+                                headers, body = request_handle:httpCall(
+                                    "bankerise_backend",
+                                    {
 
-                              -- decoding json for headers and device id
-                              local decoded
-                              local success
-                              success, decoded = pcall(json.decode, body)
-                              if not success or type(decoded) ~= "table" then
-                                  request_handle:logErr("Failed json decoding: " .. tostring(body))
-                                  request_handle:respond({[":status"] = "500"}, "Internal Server Error")
-                                  return
-                              end
-                              local ignore = {
-                              host                      = true,
-                              accesstokenvalue          = true,
-                              ["x-app-version-blocked"] = true,
-                              notificationtext          = true,
-                              }
+                                        [":method"] = "GET",
+                                        ["Authorization"] = bkrToken,
+                                        ["X-App-Id"] = appId,
+                                        [":path"] = verify_path,
+                                        [":authority"] = bkrAuthority,
+                                        ["Accept"] = "*/*",
+                                        ["Accept-Encoding"] = "gzip",
+                                        ["Content-Type"] = "application/json",
+                                        ["Channel"] = channel
+                                    },
+                                    "",
+                                    5000
+                                )
+                                local device_info = tostring(body)
+                                if headers[":status"] == "200" then
+                                    request_handle:logInfo("device check -> " .. body)
+                                elseif headers[":status"] == "404" then
+                                  request_handle:logErr("Device doesn't exist. Returned: " .. tostring(body))
+                                  request_handle:logInfo("Generating DeviceId and posting DeviceInfo to RS")
+                                  -- http Call to create new Device info
+                                  local UA = request_handle:headers():get("user-agent")
+                                  local channel = decoded["Channel"]
+                                  local create_path = "/device-management/create/device"
+                                  local create_headers = {
+                                      [":method"] = method,
+                                      [":path"] = create_path,
+                                      [":authority"] = authority,
+                                      ["cookie"] = cookie,
+                                      ["user-agent"] = UA,
+                                      ["channel"] = channel
+                                  }
+
+                                  local create_resp_headers, create_body = request_handle:httpCall(
+                                      cluster_name,
+                                      create_headers,
+                                      "",
+                                      5000
+                                  )
+                                  for key, value in pairs(create_resp_headers) do
+                                    if key:lower() == "set-cookie" then
+                                      request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-0", value)
+                                      request_handle:logInfo("Altered Device ID set-cookie header due to regeneration of deviceId, Cookie:  " .. value)
+                                      break
+                                    end
+                                  end
   
-                              for key, value in pairs(decoded) do
-                                if not ignore[key:lower()] then
-                                  request_handle:logInfo("header -> " .. key .. ": " .. value)
-                          
-                                  request_handle:headers():add(key, value)
+                                  -- http Call to save device Info in Resource Server
+                                  local device_info = tostring(create_body)
+                                  request_handle:logInfo("Device created: " .. device_info)
+                                  local save_path = "/bankerise-platform/configuration/gw/device"
+                                  local save_headers = {
+                                  [":method"] = "POST",
+                                  [":path"] = save_path,
+                                  [":authority"] = bkrAuthority,
+                                  ["content-type"] = "application/json",
+                                  ["Authorization"] = bkrToken,
+                                  ["Accept"] = "*/*",
+                                  ["Accept-Encoding"] = "gzip",
+                                  ["X-App-Id"] = appId,
+                                  ["Channel"] = channel
+                                  }
+
+                                  local save_resp_headers, save_resp_body = request_handle:httpCall(
+                                    "bankerise_backend",
+                                    save_headers,
+                                    device_info,
+                                    5000
+                                  )
+                                  if save_resp_headers[":status"] == "201" then 
+                                    request_handle:logInfo("Device info saved in RS. Response: " .. tostring(save_resp_body))
+                                    return
+                                  else
+                                    request_handle:logErr("Error occured while saving Device-Info in RS, STATUS: " .. save_resp_headers[":status"])
+                                    return
+                                  end
+                                else
+                                  request_handle:logInfo("Unable to access RS, verify connection -- STATUS: " .. headers[":status"])
+                                  return
+                                end
+
+                                -- Http Call to save Device Info in Session
+                                request_handle:logInfo("saving device info in session")
+                                local session_path = "/device-management/save/device"
+                                local session_headers = {
+                                    [":method"] = method,
+                                    [":path"] = session_path,
+                                    [":authority"] = authority,
+                                    ["cookie"] = cookie,
+                                    ["content-type"] = "application/json"
+                                }
+
+                                local session_resp_headers, session_body = request_handle:httpCall(
+                                    cluster_name,
+                                    session_headers,
+                                    device_info,
+                                    5000
+                                )
+                                request_handle:logInfo("device-management/save/device status -> " .. tostring(session_resp_headers[":status"]))
+                            end
+
+                            function envoy_on_response(response_handle)
+                              local data = response_handle:streamInfo():dynamicMetadata():get("envoy.lua")
+                              if data then
+                                local sc = data["set-cookie-0"]
+                                response_handle:logInfo("set-cookie header --> " .. sc)
+                                response_handle:headers():add("Set-Cookie", sc)
+                                if data["X-App-Version-Blocked"] then
+                                  response_handle:logWarn("Returning Blocking response headers ,Blocking status: " .. data["X-App-Version-Blocked"])
+                                  response_handle:headers():add("X-App-Version-Blocked",data["X-App-Version-Blocked"])
+                                  response_handle:headers():add("X-Notification-Text", data["NotificationText"])
                                 end
                               end
-                              local appVersion = decoded["X-App-Version-Blocked"]
-                              local notificationText = decoded["NotificationText"]
-                              if appVersion then
-                                request_handle:logInfo(" SUS VERSION")
-                                request_handle:streamInfo():dynamicMetadata():set("envoy.lua","X-App-Version-Blocked",appVersion)
-                                local status = request_handle:streamInfo():dynamicMetadata():get("envoy.lua")["X-App-Version-Blocked"]
-                                request_handle:logInfo("status ? :" .. status)
-                              end
-                              if notificationText then 
-                                request_handle:logInfo("Notification")
-                                request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "NotificationText" ,notificationText)
-                                local status = request_handle:streamInfo():dynamicMetadata():get("envoy.lua")["X-App-Version-Blocked"]
-                                  if tostring(status) == "True" then 
-                                    request_handle:logErr("BLOCKED VERSION --> Rejecting Request ")
-                                    request_handle:respond({
-                                    [":status"] = "403",
-                                    ["content-type"] = "text/plain",
-                                    ["X-app-Version-Blocked"] = True  
-                                  }, "Forbidden\n" .. "NotificationText: " .. tostring(notificationText))
-                                  end 
-                              end
-                               local accessToken = decoded["accessTokenValue"]
-                              if accessToken then
-                                  request_handle:headers():add("Authorization", "Bearer " .. accessToken)
-                                  request_handle:logInfo("Authorization header added successfully.")
-                              end
-                              request_handle:logInfo("Verifying Device-Id existence in resource server backend")
-                              local device_id = decoded["X-Device-Id"]
-                              local verify_path = "/devices/" .. device_id
-                              headers, body = request_handle:httpCall(
-                                  "resource_server",
-                                  {
-                                      [":method"] = method,
-                                      [":path"] = verify_path,
-                                      [":authority"] = authority
-                                  },
-                                  "",
-                                  5000
-                              )
-                              local device_info = tostring(body)
-                              if headers[":status"] == "200" then
-                                  request_handle:logInfo("device check -> " .. body)
-                                  
-                                 
-                                  if body == "null" then
-                                      request_handle:logErr("Device doesn't exist. Returned: " .. tostring(body))
-                                      request_handle:logInfo("Generating DeviceId and posting DeviceInfo to RS")
-                                      -- http Call to create new Device info
-                                      local UA = request_handle:headers():get("user-agent")
-                                      local channel = request_handle:headers():get("channel")
-                                      local create_path = "/device-management/create/device"
-                                      local create_headers = {
-                                          [":method"] = method,
-                                          [":path"] = create_path,
-                                          [":authority"] = authority,
-                                          ["cookie"] = cookie,
-                                          ["user-agent"] = UA,
-                                          ["channel"] = channel
-                                      }
-
-                                      local create_resp_headers, create_body = request_handle:httpCall(
-                                          cluster_name,
-                                          create_headers,
-                                          "",
-                                          5000
-                                      )
-
-                                      -- http Call to save device Info in Resource Server
-                                      local device_info = tostring(create_body)
-                                      request_handle:logInfo("Device created: " .. device_info)
-                                      local save_path = "/devices/save"
-                                      local save_headers = {
-                                          [":method"] = "POST",
-                                          [":path"] = save_path,
-                                          [":authority"] = authority,
-                                          ["cookie"] = cookie,
-                                          ["user-agent"] = UA,
-                                          ["content-type"] = "application/json"
-                                      }
-
-                                      local save_resp_headers, save_resp_body = request_handle:httpCall(
-                                          "resource_server",
-                                          save_headers,
-                                          device_info,
-                                          5000
-                                      )
-                                      request_handle:logInfo("Device info saved in RS. Response: " .. tostring(save_resp_body))
-                                      return
-                                  end
-                              else
-                                  request_handle:logInfo("Unable to access RS, verify connection")
-                              end
-
-                              -- Http Call to save Device Info in Session
-                              request_handle:logInfo("saving device info in session")
-                              local session_path = "/device-management/save/device"
-                              local session_headers = {
-                                  [":method"] = method,
-                                  [":path"] = session_path,
-                                  [":authority"] = authority,
-                                  ["cookie"] = cookie,
-                                  ["content-type"] = "application/json"
-                              }
-
-                              local session_resp_headers, session_body = request_handle:httpCall(
-                                  cluster_name,
-                                  session_headers,
-                                  device_info,
-                                  5000
-                              )
-                              request_handle:logInfo("device-management/save/device status -> " .. tostring(session_resp_headers[":status"]))
-                          end
-
-                          function envoy_on_response(response_handle)
-                            local data = response_handle:streamInfo():dynamicMetadata():get("envoy.lua")
-                            if data then
-                                
-                              local index = 0
-                              while data["set-cookie-" .. index] do
-                                  local sc = data["set-cookie-" .. index]
-                                  response_handle:logInfo("set-cookie header --> " .. sc)
-                                  response_handle:headers():add("Set-Cookie", sc)
-                                  index = index + 1
-                              end
-                              
-                              if data["X-App-Version-Blocked"] then
-                                response_handle:logWarn("Returning Blocking response headers ,Blocking status: " .. data["X-App-Version-Blocked"])
-                                response_handle:headers():add("X-App-Version-Blocked",data["X-App-Version-Blocked"])
-                                response_handle:headers():add("X-Notification-Text", data["NotificationText"])
-                              end
                             end
-                          end
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router

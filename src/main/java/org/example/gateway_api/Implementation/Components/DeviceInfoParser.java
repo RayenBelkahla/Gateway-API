@@ -1,6 +1,7 @@
 package org.example.gateway_api.Implementation.Components;
 
 import org.example.gateway_api.Implementation.Objects.DeviceInfo;
+import org.example.gateway_api.Implementation.Objects.Variables;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -22,7 +23,7 @@ public class DeviceInfoParser {
     }
 
     public Mono<DeviceInfo> extract(ServerWebExchange exchange, String deviceId, String channel) {
-        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        String userAgent = exchange.getRequest().getHeaders().getFirst(Variables.USER_AGENT);
         if (userAgent == null) {
             return Mono.just(new DeviceInfo(deviceId, channel, null, null, null, null));
         }

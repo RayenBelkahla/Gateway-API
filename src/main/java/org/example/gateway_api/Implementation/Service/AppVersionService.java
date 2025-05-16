@@ -1,8 +1,7 @@
 package org.example.gateway_api.Implementation.Service;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.gateway_api.Implementation.Enum.Status;
 import org.example.gateway_api.Implementation.Objects.AppInfo;
+import org.example.gateway_api.Implementation.Objects.Variables;
 import org.example.gateway_api.Implementation.Repo.InMemoryAppVersionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,18 +13,13 @@ import java.util.List;
 public class AppVersionService {
     Logger logger = LoggerFactory.getLogger(AppVersionService.class);
     private final InMemoryAppVersionRepository repository;
-    private final ObjectMapper objectMapper;
-
     public AppVersionService(InMemoryAppVersionRepository repository) {
         this.repository = repository;
-        this.objectMapper = new ObjectMapper();
         }
-
-    public void saveAppVersions(String jsonData) {
+    public void saveAppVersions(List<AppInfo> jsonData) {
         try {
-            List<AppInfo> versions = objectMapper.readValue(jsonData, new TypeReference<>() {
-            });
-            versions.forEach(repository::save);
+
+            jsonData.forEach(repository::save);
             logger.info("Stored all versions in memory.");
         } catch (Exception e) {
             logger.error("Error storing app versions: {}", e.getMessage());
@@ -45,22 +39,22 @@ public class AppVersionService {
         if(appInfo != null) {
             if(appInfo.status().equals(Status.BLOCKING.toString())) {
                 logger.warn("A client requested access using a deprecated app version -- Access Blocked");
-                 headerData.put("X-App-Version-Blocked", "True");
+                 headerData.put(Variables.X_APP_VERSION_BLOCKED, "True");
                  String infoText = appInfo.informationText();
-                 headerData.put("NotificationText", infoText);
+                 headerData.put(Variables.NOTIFICATION_TEXT, infoText);
                  return headerData;
             }
-            headerData.put("X-App-Version-Number",appInfo.versionNumber());
-            headerData.put("X-App-Version-Key",appInfo.versionKey());
+            headerData.put(Variables.X_APP_VERSION_NUMBER,appInfo.versionNumber());
+            headerData.put(Variables.X_APP_VERSION_KEY,appInfo.versionKey());
             if(appInfo.status().equals(Status.ACTIVE_NOTIFYING.toString())) {
-                headerData.put("X-App-Version-Blocked", "False");
+                headerData.put(Variables.X_APP_VERSION_BLOCKED, "False");
                 String infoText = appInfo.informationText();
-                headerData.put("NotificationText", infoText);
+                headerData.put(Variables.NOTIFICATION_TEXT, infoText);
             }
             return headerData;
         }
-        headerData.put("X-App-Version-Blocked", "True");
-        headerData.put("NotificationText","Unsupported app version");
+        headerData.put(Variables.X_APP_VERSION_BLOCKED, "True");
+        headerData.put(Variables.NOTIFICATION_TEXT,"Unsupported app version");
         System.out.println(headerData);
         return headerData;
     }

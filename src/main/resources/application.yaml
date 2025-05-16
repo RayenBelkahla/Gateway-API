@@ -1,6 +1,8 @@
 server:
   forward-headers-strategy: framework
   port: 8082
+bankerise:
+  backend_url: "http://showcase-retail-api.pres.proxym-it.net"
 
 spring:
   security:
@@ -14,15 +16,19 @@ spring:
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope: openid, profile, email
-          gateway-client:
-            client-id: gateway-client-id
+          keycloak:
+            client-id: api_gateway_front
+            client-secret: nEqjCaEp1IxJgDT7s9PCaud6cN3RVRCe
+            scope: openid, profile, email
             authorization-grant-type: client_credentials
-            client-secret: vSPS7vk9nqcHhlfUjprskzC1d9L4lJHQ
-            scope: openid
-            provider: keycloak
+            provider: gw-auth
         provider:
           keycloak:
             issuer-uri: http://localhost:8080/realms/rayen-realm
+          gw-auth:
+            issuer-uri: http://platform-keycloak.pres.proxym-it.net/realms/showcase-admin-dev
+
+
   data:
     redis:
       port: 6379

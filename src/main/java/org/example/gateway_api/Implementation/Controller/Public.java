@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-
 import java.util.HashMap;
 import java.util.Map;
 
@@ -44,20 +43,22 @@ public class Public {
                     return headerValidator.buildHeaderData(exchange)
                             .flatMap(headerData -> {
                                 sessionData.putAll(headerData);
-                                if(sessionData.get("Channel").equals(Channel.MOBILE.toString())) {
+                                if(sessionData.get("Channel").equals(Channel.MOB.toString())) {
                                     String versionKey = headerData.get("X-App-Version-Key").toString();
                                     sessionData.putAll(appVersionService.AppVersionHandling(versionKey));
                                 }
-
                                 return sessionService.getSession(clientId, exchange)
                                         .flatMap(sessionMap -> {
                                             sessionData.putAll(sessionMap);
-
-                                            return Mono.justOrEmpty(sessionData);
+                                            // map the token into the same map and return the map
+                                            return sessionService.getGwToken()
+                                                    .map(token -> {
+                                                        sessionData.put("GwTokenValue", token);
+                                                        return sessionData;
+                                                    });
                                         });
                             });
                 });
     }
-
 
 }

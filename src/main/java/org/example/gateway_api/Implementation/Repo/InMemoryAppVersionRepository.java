@@ -1,7 +1,7 @@
 package org.example.gateway_api.Implementation.Repo;
+
 import org.example.gateway_api.Implementation.Objects.AppInfo;
 import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

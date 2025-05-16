@@ -36,7 +36,7 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
  bootJar {
-     archiveBaseName.set('gateway_api')
+     archiveBaseName.set('gateway_service')
      archiveVersion.set('1.0')
      manifest {
          attributes(

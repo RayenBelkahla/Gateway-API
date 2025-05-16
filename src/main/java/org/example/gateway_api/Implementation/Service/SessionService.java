@@ -3,6 +3,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.gateway_api.Implementation.Components.*;
 import org.example.gateway_api.Implementation.Objects.DeviceInfo;
+import org.example.gateway_api.Implementation.Objects.Variables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,7 @@ public class SessionService {
     private final DeviceProvisioning deviceProvisioning;
     private final SessionResolver sessionResolver;
     private final Logger logger = LoggerFactory.getLogger(SessionService.class);
+
     @Autowired
     public SessionService(OAuthSession oAuthSessionService,
                           DeviceProvisioning deviceProvisioning,
@@ -30,6 +32,11 @@ public class SessionService {
         this.deviceProvisioning = deviceProvisioning;
         this.sessionResolver = sessionResolver;
         this.deviceInfoParser = deviceInfoParser;
+
+
+    }
+    public Mono<String> getGwToken() {
+        return oAuthSessionService.getGwToken();
     }
 
     public Mono<Map<String, Object>> getSession(String clientId, ServerWebExchange exchange) {
@@ -46,20 +53,20 @@ public class SessionService {
         return Mono.fromCallable(() -> {
             try {
                 JsonNode jsonNode = mapper.readTree(rawJson);
-                if (!jsonNode.hasNonNull("deviceId")) {
+                if (!jsonNode.hasNonNull(Variables.DEVICE_ID)) {
                     throw new IllegalArgumentException("Missing field: deviceId");
                 }
-                if (!jsonNode.hasNonNull("channel")) {
+                if (!jsonNode.hasNonNull(Variables.DI_CHANNEL)) {
                     throw new IllegalArgumentException("Missing field: channel");
                 }
-                String deviceId = jsonNode.get("deviceId").asText();
+                String deviceId = jsonNode.get(Variables.DEVICE_ID).asText();
                 String platform = jsonNode.hasNonNull("platform")
-                        ? jsonNode.get("platform").asText()
-                        : jsonNode.path("os").asText();
-                String osVersion = jsonNode.path("osVersion").asText();
-                String model = jsonNode.path("model").asText();
-                String modelVersion = jsonNode.path("modelVersion").asText();
-                String channel = jsonNode.get("channel").asText();
+                        ? jsonNode.get(Variables.PLATFORM).asText()
+                        : jsonNode.path(Variables.OS).asText();
+                String osVersion = jsonNode.path(Variables.OS_VERSION).asText();
+                String model = jsonNode.path(Variables.MODEL).asText();
+                String modelVersion = jsonNode.path(Variables.MODEL_VERSION).asText();
+                String channel = jsonNode.get(Variables.DI_CHANNEL).asText();
 
                 return new DeviceInfo(deviceId, channel, platform, osVersion, model, modelVersion);
             } catch (Exception e) {
@@ -68,21 +75,13 @@ public class SessionService {
             }
         }).subscribeOn(Schedulers.boundedElastic());
     }
-
-
     public Mono<WebSession> getMainSessionAttributes(ServerWebExchange exchange) {
         return sessionResolver.resolveSession(exchange);
     }
-    // this will be used to create a new device info object and post it to the database on RS
     public Mono<DeviceInfo> createDeviceInfo(ServerWebExchange exchange){
-        String Channel = exchange.getRequest().getHeaders().getFirst("Channel");
-        String deviceId = exchange.getRequest().getHeaders().getFirst("X-Device-Id");
-        if (deviceId == null)
-        {
-            deviceId = deviceProvisioning.resolveDeviceId(exchange);
-        }
-
-        return deviceInfoParser.extract(exchange, deviceId,Channel);
+        String Channel = exchange.getRequest().getHeaders().getFirst(Variables.CHANNEL);
+                String deviceId = String.valueOf(deviceProvisioning.generateDeviceId(exchange));
+        return deviceInfoParser.extract(exchange, deviceId, Channel);
     }
     public Mono<DeviceInfo> saveDeviceInfoInSession(DeviceInfo deviceInfo, ServerWebExchange exchange) {
         return exchange.getSession()

@@ -1,20 +1,19 @@
 package org.example.gateway_api.Implementation.Config;
 
+import org.example.gateway_api.Implementation.Repo.AppWideOAuth2AuthorizedClientRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-//import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
-import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientProvider;
-import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientProviderBuilder;
+import org.springframework.security.oauth2.client.*;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultReactiveOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.client.web.server.WebSessionServerOAuth2AuthorizedClientRepository;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.WebSessionServerSecurityContextRepository;
+
 
 @Configuration
 @EnableWebFluxSecurity
@@ -82,4 +81,27 @@ public class SecurityConfig {
 
         return authorizedClientManager;
     }
+
+    @Bean
+    public ReactiveOAuth2AuthorizedClientService authorizedClientService() {
+        return new AppWideOAuth2AuthorizedClientRepository();
+    }
+    @Bean
+    public ReactiveOAuth2AuthorizedClientManager serviceAuthorizedClientManager(
+            ReactiveClientRegistrationRepository clients,
+            ReactiveOAuth2AuthorizedClientService clientService
+    ) {
+        var mgr = new AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager(
+                clients,
+                clientService
+        );
+
+        mgr.setAuthorizedClientProvider(
+                ReactiveOAuth2AuthorizedClientProviderBuilder.builder()
+                        .clientCredentials()
+                        .build()
+        );
+        return mgr;
+    }
+
 }

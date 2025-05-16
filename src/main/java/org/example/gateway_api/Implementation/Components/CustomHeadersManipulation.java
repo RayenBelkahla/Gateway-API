@@ -1,15 +1,18 @@
 package org.example.gateway_api.Implementation.Components;
+
 import org.example.gateway_api.Implementation.Enum.Channel;
+import org.example.gateway_api.Implementation.Objects.Variables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+
 @Component
 public class CustomHeadersManipulation {
     private static final Logger logger = LoggerFactory.getLogger(CustomHeadersManipulation.class);
-    private static final String X_APP_VERSION_KEY = "X-App-Version-Key";
-    private static final String REFERER = "Referer";
-    private static final String HOST = "Host";
+    private static final String X_APP_VERSION_KEY = Variables.X_APP_VERSION_KEY;
+    private static final String REFERER = Variables.REFERER;
+    private static final String HOST = Variables.HOST;
 
     public String extractAppVersionKey(ServerWebExchange exchange) {
         return exchange.getRequest().getHeaders().getFirst(X_APP_VERSION_KEY);
@@ -39,6 +42,6 @@ public class CustomHeadersManipulation {
 
     public Channel determineChannel(ServerWebExchange exchange) {
         String appVersionKey = extractAppVersionKey(exchange);
-        return appVersionKey != null ? Channel.MOBILE : Channel.WEB;
+        return appVersionKey != null ? Channel.MOB : Channel.WEB;
     }
 }

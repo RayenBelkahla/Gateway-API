@@ -34,7 +34,6 @@ public class DeviceManagementController {
                     logger.error("Failed to parse DeviceInfo", e);
                     return new RuntimeException("Failed to parse DeviceInfo: " + e.getMessage(), e);
                 });
-
     }
 
 }
