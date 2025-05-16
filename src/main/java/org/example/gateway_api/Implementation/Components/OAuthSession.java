@@ -8,7 +8,6 @@ import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,7 +29,7 @@ public class OAuthSession {
     public Mono<Map<String, Object>> getSession(String clientId, ServerWebExchange exchange) {
         Map<String, Object> data = new HashMap<>();
 
-        return ReactiveSecurityContextHolder.getContext()
+                return ReactiveSecurityContextHolder.getContext()
                 .map(SecurityContext::getAuthentication)
                 .flatMap(authentication -> {
                     OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest
@@ -38,23 +37,28 @@ public class OAuthSession {
                             .principal(authentication)
                             .attribute(ServerWebExchange.class.getName(), exchange)
                             .build();
-
                     return authorizedClientManager.authorize(authorizeRequest);
                 })
                 .map(client -> {
                     if (client != null) {
                         OAuth2AccessToken accessToken = client.getAccessToken();
                         data.put("principalName", client.getPrincipalName());
-                        data.put("clientRegistrationId", client.getClientRegistration().getRegistrationId());
                         if (accessToken != null) {
                             data.put("accessTokenValue", accessToken.getTokenValue());
-                            data.put("accessTokenExpiresAt", accessToken.getExpiresAt());
                         }
                     }
 
                     return data;
                 })
                 .defaultIfEmpty(data);
+    }
+    public Mono<Map<String, Object>> getDeviceInfo(ServerWebExchange exchange) {
+        Map<String, Object> data = new HashMap<>();
+        return exchange.getSession().map(
+                session -> {
+                    data.put("DeviceInfo", session.getAttribute("DEVICE-INFO"));
+                    return data;
+                });
     }
 
 

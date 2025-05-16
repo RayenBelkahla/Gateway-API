@@ -92,5 +92,8 @@ public class SessionService {
                 })
                 .thenReturn(deviceInfo);
     }
+    public Mono<Map<String, Object>> getDeviceInfo(ServerWebExchange exchange) {
+        return oAuthSessionService.getDeviceInfo(exchange);
+    }
 
 }

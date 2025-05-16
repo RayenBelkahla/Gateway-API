@@ -33,32 +33,42 @@ public class Public {
     public Mono<Map<String, Object>> getHeaders(ServerWebExchange exchange) {
         return headerValidator.buildHeaderData(exchange);
     }
-    @GetMapping("/attributes/{clientId}")
-    public Mono<Map<String, Object>> getSessionAttributes(@PathVariable String clientId, ServerWebExchange exchange) {
+    @GetMapping("/attributes")
+    public Mono<Map<String, Object>> getSessionAttributes(ServerWebExchange exchange) {
         return sessionService.includeDeviceId(exchange)
-                .flatMap(deviceId -> {
-                    Map<String, Object> sessionData = new HashMap<>();
-                    sessionData.put("X-Device-Id", deviceId);
+                .flatMap(deviceId ->
+                        headerValidator.buildHeaderData(exchange)
+                                .flatMap(headerData -> {
+                                    // start with X-Device-Id + headerData
+                                    Map<String, Object> sessionData = new HashMap<>(headerData);
+                                    sessionData.put("X-Device-Id", deviceId);
 
-                    return headerValidator.buildHeaderData(exchange)
-                            .flatMap(headerData -> {
-                                sessionData.putAll(headerData);
-                                if(sessionData.get("Channel").equals(Channel.MOB.toString())) {
-                                    String versionKey = headerData.get("X-App-Version-Key").toString();
-                                    sessionData.putAll(appVersionService.AppVersionHandling(versionKey));
-                                }
-                                return sessionService.getSession(clientId, exchange)
-                                        .flatMap(sessionMap -> {
-                                            sessionData.putAll(sessionMap);
-                                            // map the token into the same map and return the map
-                                            return sessionService.getGwToken()
-                                                    .map(token -> {
-                                                        sessionData.put("GwTokenValue", token);
-                                                        return sessionData;
-                                                    });
-                                        });
-                            });
-                });
+                                    // mobile-only version handling
+                                    if (Channel.MOB.toString().equals(sessionData.get("Channel"))) {
+                                        String versionKey = headerData.get("X-App-Version-Key").toString();
+                                        sessionData.putAll(appVersionService.AppVersionHandling(versionKey));
+                                    }
+
+                                    // now fetch the “front” session
+                                    return sessionService.getSession("front", exchange)
+                                            .flatMap(sessionMap -> {
+                                                sessionData.putAll(sessionMap);
+
+                                                // fetch the gateway token
+                                                return sessionService.getGwToken()
+                                                        .flatMap(token -> {
+                                                            sessionData.put("GwTokenValue", token);
+
+                                                            // finally fetch deviceInfo and return the completed map
+                                                            return sessionService.getDeviceInfo(exchange)
+                                                                    .map(deviceData -> {
+                                                                        sessionData.putAll(deviceData);
+                                                                        return sessionData;
+                                                                    });
+                                                        });
+                                            });
+                                })
+                );
     }
 
 }

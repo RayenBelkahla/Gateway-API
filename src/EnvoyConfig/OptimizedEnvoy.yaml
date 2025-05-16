@@ -31,11 +31,7 @@ static_resources:
                     - name: gateway-service
                       domains: ["*"]
                       routes:
-                        - match: {prefix: "/public"}
-                          route: {cluster: bankerise_backend}
-                        - match: {prefix: "/configuration"}
-                          route: {cluster: gateway_service}
-                        - match: { prefix: "/authorize" }
+                        - match: { prefix: "/authorization"}
                           route: { cluster: gateway_service}
                         - match: { prefix: "/login"}
                           route: { cluster: gateway_service}
@@ -43,13 +39,27 @@ static_resources:
                           route: { cluster: gateway_service}
                         - match: { prefix: "/api"}
                           route: { cluster: resource_server}
-                        - match: { prefix: "/authorization"}
-                          route: { cluster: bankerise_backend}
                         - match: {prefix: "/devices"}
                           route: {cluster: resource_server}
                         - match: {prefix: "/bankerise-platform"}
-                          route: {cluster: bankerise_backend}
+                          route:
+                            cluster: bankerise_backend
+                            host_rewrite_literal: "showcase-retail-api.pres.proxym-it.net"
+
+
                 http_filters:
+                  - name: envoy.filters.http.local_ratelimit
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                      stat_prefix: http_local_rate_limiter
+                      token_bucket:
+                        max_tokens: 100
+                        tokens_per_fill: 2
+                        fill_interval: 5s
+                      filter_enabled:
+                        default_value: { numerator: 10, denominator: HUNDRED }
+                      filter_enforced:
+                        default_value: { numerator: 5, denominator: HUNDRED }
                   - name: envoy.filters.http.lua
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
@@ -57,17 +67,16 @@ static_resources:
                         inline_string: |
                           function envoy_on_request(request_handle)
                                 local json = require "json"
-
                                 local request_id = request_handle:headers():get("x-request-id")
                                 request_handle:logInfo("-------------- Request Id: " .. request_id .. " --------------")
                                 local appId = request_handle:headers():get("X-App-Id")
                                 request_handle:logInfo("Initiating HTTP Call to retrieve essential headers.")
-                                local authority = request_handle:headers():get(":authority")
+                                local authority = "localhost:8082"
                                 local method = "GET"
                                 local cluster_name = "gateway_service"
                                 local cookie = request_handle:headers():get("cookie")
                                 local versionKey = request_handle:headers():get("X-App-Version-Key")
-                                local path = "/configuration/attributes/user-access-client"
+                                local path = "/configuration/attributes"
 
                                 local headers, body = request_handle:httpCall(
                                     cluster_name,
@@ -81,9 +90,8 @@ static_resources:
                                     "",
                                     5000
                                      )
-
                                 -- Handle mobile device missing cookie
-                                if headers[":status"] == "400" then 
+                                if headers[":status"] == "400" then
                                     request_handle:logInfo("Mobile device doesn't contain x-device-id cookie, request rejected.")
                                     request_handle:respond({
                                       [":status"] = "400"
@@ -96,9 +104,8 @@ static_resources:
                                 end
 
                                 -- decoding json for headers and device id
-                                local decoded
-                                local success
-                                success, decoded = pcall(json.decode, body)
+                               
+                                local success, decoded = pcall(json.decode, body)
                                 if not success or type(decoded) ~= "table" then
                                     request_handle:logErr("Failed json decoding: " .. tostring(body))
                                     request_handle:respond({[":status"] = "500"}, "Internal Server Error")
@@ -111,22 +118,22 @@ static_resources:
                                   accesstokenvalue          = true,
                                   ["x-app-version-blocked"] = true,
                                   notificationtext          = true,
-                                  gwtokenvalue              = true,
-                                  ["x-app-id"]              = true,
+                                  gwtokenvalue              = true,    
                                   ["x-app-version-key"]     = true,
                                   channel                   = true,
+                                  principalname             = true,
+                                  deviceinfo                = true
                                 }
                                 local index = 1
                                 for key, value in pairs(headers) do
                                     if key:lower() == "set-cookie" then
-                                        if string.find(value:lower(),"x-device-id",1,true) then 
-                                          request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-0", value)
-                                          request_handle:logInfo("x device id value: " ..value)
-                                          break
-                                        end
-                                        request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
-                                        request_handle:logInfo("set-cookie header " .. index .. " stored successfully, Cookie: " .. value)
+                                      if string.find(value:lower(),"x-device-id",1,true) then 
+                                        request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-0", value)
+                                        request_handle:logInfo("x device id value: " ..value)
                                         break
+                                      end
+                                      request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "set-cookie-" .. index, value)
+                                      request_handle:logInfo("set-cookie header " .. index .. " stored successfully, Cookie: " .. value)
                                     end
                                 end
                                 for key, value in pairs(decoded) do
@@ -157,8 +164,9 @@ static_resources:
                                     }, "Forbidden\n" .. "NotificationText: " .. tostring(notificationText))
                                     end 
                                 end
+                                 local req_path = request_handle:headers():get(":path")
                                  local accessToken = decoded["accessTokenValue"]
-                                if accessToken then
+                                if accessToken and not req_path:find("public",1,true) then
                                     request_handle:headers():add("Authorization", "Bearer " .. accessToken)
                                     request_handle:logInfo("Authorization header added successfully.")
                                 end
@@ -243,8 +251,8 @@ static_resources:
                                     request_handle:logInfo("Device info saved in RS. Response: " .. tostring(save_resp_body))
                                     request_handle:respond({
                                     [":status"] = "201",
-                                    },"Device Created.")
-                                    return
+                                    },"")
+
                                   else
                                     request_handle:logErr("Error occured while saving Device-Info in RS, STATUS: " .. save_resp_headers[":status"])
                                     return
@@ -253,9 +261,8 @@ static_resources:
                                   request_handle:logInfo("Unable to access RS, verify connection -- STATUS: " .. headers[":status"])
                                   return
                                 end
-
+                                -- TODO make the config endpoint of the gateway service return a boolean if the device info is already saved in session
                                 -- Http Call to save Device Info in Session
-                                request_handle:logInfo("saving device info in session")
                                 local session_path = "/device-management/save/device"
                                 local session_headers = {
                                     [":method"] = method,
@@ -264,14 +271,16 @@ static_resources:
                                     ["cookie"] = cookie,
                                     ["content-type"] = "application/json"
                                 }
-
-                                local session_resp_headers, session_body = request_handle:httpCall(
-                                    cluster_name,
-                                    session_headers,
-                                    device_info,
-                                    5000
-                                )
-                                request_handle:logInfo("device-management/save/device status -> " .. tostring(session_resp_headers[":status"]))
+                                if not decoded["DeviceInfo"] then
+                                  request_handle:logInfo("saving device info in session")
+                                  local session_resp_headers, session_body = request_handle:httpCall(
+                                      cluster_name,
+                                      session_headers,
+                                      device_info,
+                                      5000
+                                  )
+                                  request_handle:logInfo("device-management/save/device status -> " .. tostring(session_resp_headers[":status"]))
+                                end
                             end
 
                             function envoy_on_response(response_handle)

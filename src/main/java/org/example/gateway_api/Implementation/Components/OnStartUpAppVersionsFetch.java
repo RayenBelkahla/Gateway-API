@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import java.util.List;
@@ -16,18 +18,24 @@ public class OnStartUpAppVersionsFetch implements ApplicationRunner {
     private final Logger logger = LoggerFactory.getLogger(OnStartUpAppVersionsFetch.class);
     private final WebClient webClient;
     private final AppVersionService versionService;
-    public OnStartUpAppVersionsFetch(@Qualifier("webClientService") WebClient webClient, AppVersionService versionService) {
+    private final CacheGatewayTokenManager cacheGatewayTokenManager;
+
+    public OnStartUpAppVersionsFetch(@Qualifier("webClientService") WebClient webClient, AppVersionService versionService,CacheGatewayTokenManager cacheGatewayTokenManager) {
         this.webClient = webClient;
         this.versionService = versionService;
+        this.cacheGatewayTokenManager = cacheGatewayTokenManager;
+
     }
     @Override
     public void run(ApplicationArguments args) {
 
-        String path = "/bankerise-platform/configuration/appversions";
-
+        String path = "/configuration/appversions";
+        String gwToken = cacheGatewayTokenManager.getAccessToken("keycloak")
+                .map(OAuth2AccessToken::getTokenValue).block();
         List<AppInfo> appInfo= webClient.get()
                 .uri(path)
                 .header(Variables.X_APP_ID,"api_gateway_front")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + gwToken)
                 .retrieve()
                 .bodyToFlux(AppInfo.class)
                 .collectList()

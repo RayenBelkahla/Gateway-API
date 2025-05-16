@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/authorize")
+@RequestMapping("/authorization")
 public class SessionController {
     public final SessionService sessionService;
     public final CacheGatewayTokenManager cacheManager;

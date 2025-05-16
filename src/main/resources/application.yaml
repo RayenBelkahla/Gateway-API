@@ -2,16 +2,16 @@ server:
   forward-headers-strategy: framework
   port: 8082
 bankerise:
-  backend_url: "http://showcase-retail-api.pres.proxym-it.net"
+  backend_url: "http://showcase-retail-api.pres.proxym-it.net/bankerise-platform"
 
 spring:
   security:
     oauth2:
       client:
         registration:
-          user-access-client:
-            client-id: access-client
-            client-secret: 9HiG9RCeWM8uQuz1eBV5hYGRCwwFzAFu
+          front:
+            client-id: front
+            client-secret: uAyELzwAuC5V3bgNsUBdF8mXu1xlrRYs
             provider: keycloak
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
@@ -24,7 +24,7 @@ spring:
             provider: gw-auth
         provider:
           keycloak:
-            issuer-uri: http://localhost:8080/realms/rayen-realm
+            issuer-uri: http://platform-keycloak.pres.proxym-it.net/realms/showcase-retail-dev
           gw-auth:
             issuer-uri: http://platform-keycloak.pres.proxym-it.net/realms/showcase-admin-dev
 
