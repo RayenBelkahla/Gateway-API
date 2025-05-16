@@ -241,6 +241,9 @@ static_resources:
                                   )
                                   if save_resp_headers[":status"] == "201" then 
                                     request_handle:logInfo("Device info saved in RS. Response: " .. tostring(save_resp_body))
+                                    request_handle:respond({
+                                    [":status"] = "201",
+                                    },"Device Created.")
                                     return
                                   else
                                     request_handle:logErr("Error occured while saving Device-Info in RS, STATUS: " .. save_resp_headers[":status"])
