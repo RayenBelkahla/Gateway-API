@@ -36,9 +36,9 @@ services:
   envoy:
     image: envoyproxy/envoy:v1.26.0
     ports:
-      - "9901:9901"
+      - "9990:9990"
     volumes:
-      - ./envoy.yaml:/etc/envoy/envoy.yaml
+      - .EnvoyConfig/OptimizedEnvoy.yaml:/etc/envoy/OptimizedEnvoy.yaml
     networks:
       - envoy-network
     depends_on:
