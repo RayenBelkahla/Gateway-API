@@ -14,7 +14,7 @@ import org.springframework.session.data.redis.config.annotation.web.server.Enabl
 public class RedisSessionConfig {
     @Bean
     public LettuceConnectionFactory redisConnectionFactory() {
-        return new LettuceConnectionFactory();
+        return new LettuceConnectionFactory("demo_redis",6379);
     }
 
     @Bean

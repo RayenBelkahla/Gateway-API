@@ -104,7 +104,7 @@ static_resources:
                               local cluster_name = "gateway_service"
                               local cookie = request_handle:headers():get("cookie")
                               local versionKey = request_handle:headers():get("X-App-Version-Key")
-                              local path = "/configuration/attributes"
+                              local path = "/session/attributes"
 
                               local headers, body = request_handle:httpCall(
                                   cluster_name,
@@ -140,7 +140,7 @@ static_resources:
                                 ["x-app-version-key"]     = true,
                                 principalname             = true,
                                 deviceinfo                = true,
-                                clientregid               = true
+                                clientregid               = true,
                               }
                               
                               local index = 0
@@ -166,22 +166,20 @@ static_resources:
                         
                               if appVersion then
                         
-                                request_handle:logInfo("Verifying App Version validity. ")
+                                request_handle:logInfo("-- Verifying application version --")
                                 request_handle:streamInfo():dynamicMetadata():set("envoy.lua","X-App-Version-Blocked",appVersion)
                                 local status = request_handle:streamInfo():dynamicMetadata():get("envoy.lua")["X-App-Version-Blocked"]
-                                request_handle:logInfo("status ? :" .. status)
+                                request_handle:logInfo("Blocked ? --> " .. status)
                         
                               end
                         
                               if notificationText then 
-                                
-                                request_handle:logInfo("Notification")
                                 request_handle:streamInfo():dynamicMetadata():set("envoy.lua", "NotificationText" ,notificationText)
                         
                                 local status = request_handle:streamInfo():dynamicMetadata():get("envoy.lua")["X-App-Version-Blocked"]
                         
                                   if tostring(status) == "True" then 
-                                    request_handle:logErr("BLOCKED VERSION --> Rejecting Request ")
+                                    request_handle:logErr("BLOCKED VERSION --> Rejecting Request")
                                     request_handle:respond({
                                     [":status"] = "403",
                                     ["content-type"] = "text/plain",
@@ -193,7 +191,8 @@ static_resources:
                              
                               if decoded["accessTokenValue"] then
                                 request_handle:headers():add("Authorization", "Bearer " .. decoded["accessTokenValue"])
-                                request_handle:logInfo("Access Token added to Authorization header successfully.")
+                                request_handle:logInfo("Access Token --> " .. string.sub(decoded["accessTokenValue"],1,30) .. "..." )
+                                request_handle:logInfo("Access Token added to Authorization header.")
                               end
                             end
 
@@ -207,7 +206,7 @@ static_resources:
                                       response_handle:headers():add("Set-Cookie", cookie)
                                 end
                                 if data["X-App-Version-Blocked"] then
-                                  response_handle:logWarn("Returning Blocking response headers ,Blocking status: " .. data["X-App-Version-Blocked"])
+                                  response_handle:logWarn("Returning X-App-Version-Blocked response headers, status: " .. data["X-App-Version-Blocked"])
                                   response_handle:headers():add("X-App-Version-Blocked",data["X-App-Version-Blocked"])
                                   response_handle:headers():add("X-Notification-Text", data["NotificationText"])
                                 end
@@ -230,21 +229,8 @@ static_resources:
               - endpoint:
                   address:
                     socket_address:
-                      address: localhost
+                      address: demo_Oauth_client
                       port_value: 8082
-    - name: resource_server
-      connect_timeout: 5s
-      type: STRICT_DNS
-      lb_policy: ROUND_ROBIN
-      load_assignment:
-        cluster_name: resource_server
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address:
-                      address: localhost
-                      port_value: 8085
     - name: bankerise_backend
       connect_timeout: 5s
       type: STRICT_DNS

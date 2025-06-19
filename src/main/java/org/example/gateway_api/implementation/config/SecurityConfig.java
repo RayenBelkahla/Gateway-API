@@ -27,9 +27,10 @@ public class SecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/configuration/**").permitAll()
+                        .pathMatchers("/session/**").permitAll()
                         .pathMatchers("/device-management/**").permitAll()
                         .pathMatchers("/register").permitAll()
+                        .pathMatchers("/app-versions/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2Client(Customizer.withDefaults())

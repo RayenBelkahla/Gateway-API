@@ -2,50 +2,54 @@ version: '3.7'
 
 services:
 
-  backend-gate:
-    image: gateway-service:latest
-    container_name: Oauth-client
-    ports:
-      - "8082:8082"
-    depends_on:
-      - keycloak
-    networks:
-      - envoy-network
-
-  keycloak:
-    image: keycloak/keycloak:latest
-    container_name: keycloak-new
-    environment:
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
-    command: start-dev
-    ports:
-      - "8080:8080"
-    networks:
-      - envoy-network
-  redis:
+  demo_redis:
     image: redis:latest
+    container_name: demo_redis
     ports:
-      - "6379:6379"
+      - "6370:6379"
     volumes:
       - redis-data:/data
     restart: always
     networks:
-      - envoy-network
+      - demo_gateway_network
 
-  envoy:
+  demo_backend-gateway:
+    image: gateway_service:latest
+    container_name: demo_Oauth_client
+    ports:
+      - "8082:8082"
+    networks:
+      - demo_gateway_network
+    depends_on:
+      - demo_redis
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      BACKEND_URL : ${BACKEND_URL}
+      CLIENT_ID: ${CLIENT_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      GRANT_TYPE: ${GRANT_TYPE}
+      ISSUER: ${ISSUER}
+      GW_CLIENT_ID: ${GW_CLIENT_ID}
+      GW_CLIENT_SECRET: ${GW_CLIENT_SECRET}
+      GW_GRANT_TYPE: ${GW_GRANT_TYPE}
+      GW_ISSUER: ${GW_ISSUER}
+  demo_envoy:
     image: envoyproxy/envoy:v1.26.0
+    container_name: demo_envoy
     ports:
       - "9990:9990"
+      - "9901:9901"
     volumes:
-      - .EnvoyConfig/OptimizedEnvoy.yaml:/etc/envoy/OptimizedEnvoy.yaml
+      - ./envoyConfig/OptimizedEnvoy.yaml:/etc/envoy/OptimizedEnvoy.yaml
+      - ./json.lua:/usr/local/share/lua/5.1/json.lua
+    command: [ "envoy", "--config-path", "/etc/envoy/OptimizedEnvoy.yaml"]
+
     networks:
-      - envoy-network
-    depends_on:
-      - keycloak
+      - demo_gateway_network
 
 networks:
-  envoy-network:
+  demo_gateway_network:
     driver: bridge
 volumes:
   redis-data:

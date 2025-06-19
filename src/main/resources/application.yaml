@@ -2,7 +2,7 @@ server:
   forward-headers-strategy: framework
   port: 8082
 bankerise:
-  backend_url: "http://showcase-retail-api.pres.proxym-it.net/bankerise-platform"
+  backend_url: ${BACKEND_URL}
 
 spring:
   security:
@@ -10,32 +10,27 @@ spring:
       client:
         registration:
           front:
-            client-id: front
-            client-secret: uAyELzwAuC5V3bgNsUBdF8mXu1xlrRYs
+            client-id: ${CLIENT_ID}
+            client-secret: ${CLIENT_SECRET}
             provider: keycloak
-            authorization-grant-type: authorization_code
+            authorization-grant-type: ${GRANT_TYPE}
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope: openid, profile, email
           keycloak:
-            client-id: api_gateway_front
-            client-secret: nEqjCaEp1IxJgDT7s9PCaud6cN3RVRCe
+            client-id: ${GW_CLIENT_ID}
+            client-secret: ${GW_CLIENT_SECRET}
             scope: openid, profile, email
-            authorization-grant-type: client_credentials
+            authorization-grant-type: ${GW_GRANT_TYPE}
             provider: gw-auth
         provider:
           keycloak:
-            issuer-uri: http://platform-keycloak.pres.proxym-it.net/realms/showcase-retail-dev
+            issuer-uri: ${ISSUER}
           gw-auth:
-            issuer-uri: http://platform-keycloak.pres.proxym-it.net/realms/showcase-admin-dev
-
-
+            issuer-uri: ${GW_ISSUER}
   data:
     redis:
-      port: 6379
-      host: localhost
+      port: ${SPRING_DATA_REDIS_PORT}
+      host: ${SPRING_DATA_REDIS_HOST}
   session:
     redis:
       repository-type: default
-
-
-

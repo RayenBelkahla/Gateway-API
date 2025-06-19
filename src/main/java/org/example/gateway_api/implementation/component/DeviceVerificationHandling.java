@@ -25,16 +25,12 @@ public class DeviceVerificationHandling {
 
     public Mono<DeviceInfo> verifyDeviceExistence(ServerWebExchange exchange) {
         return deviceProvisioning.getDeviceId(exchange)
-                .flatMap(deviceId -> lookUpDevice(deviceId, exchange))
+                .flatMap(this::lookUpDevice)
                 .switchIfEmpty(registerDevice(exchange));
     }
-    private Mono<DeviceInfo> lookUpDevice(String deviceId,
-                                          ServerWebExchange exchange) {
-        return webClientCalls.fetch(deviceId, Variables.GW_CHANNEL_VALUE)
-                .flatMap(deviceInfo ->
-                        oAuthSession.saveDeviceInfoInSession(deviceInfo, exchange)
-                                .thenReturn(deviceInfo)
-                );
+    private Mono<DeviceInfo> lookUpDevice(String deviceId) {
+        return webClientCalls.fetch(deviceId, Variables.GW_CHANNEL_VALUE);
+
     }
 
     private Mono<DeviceInfo> registerDevice(ServerWebExchange exchange) {

@@ -3,6 +3,7 @@ package org.example.gateway_api.implementation.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.gateway_api.implementation.component.*;
+import org.example.gateway_api.implementation.objects.Channel;
 import org.example.gateway_api.implementation.objects.DeviceInfo;
 import org.example.gateway_api.implementation.objects.Variables;
 import org.slf4j.Logger;
@@ -13,6 +14,8 @@ import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebSession;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -23,16 +26,19 @@ public class SessionService {
     private final Logger logger = LoggerFactory.getLogger(SessionService.class);
     private final DeviceVerificationHandling deviceVerificationComponent;
     private final ObjectMapper mapper = new ObjectMapper();
-
+    private final HeadersValidation headerValidator;
+    private final AppVersionService appVersionService;
     @Autowired
     public SessionService(OAuthSession oAuthSessionService,
                           DeviceProvisioning deviceProvisioning,
                           SessionResolver sessionResolver,
-                          DeviceVerificationHandling deviceVerificationComponent) {
+                          DeviceVerificationHandling deviceVerificationComponent, HeadersValidation headerValidator, AppVersionService appVersionService) {
         this.oAuthSessionService = oAuthSessionService;
         this.deviceProvisioning = deviceProvisioning;
         this.sessionResolver = sessionResolver;
         this.deviceVerificationComponent = deviceVerificationComponent;
+        this.headerValidator = headerValidator;
+        this.appVersionService = appVersionService;
     }
 
 
@@ -99,6 +105,28 @@ public class SessionService {
     }
     public void setDeviceCookie (ServerWebExchange exchange,String deviceId) {
         deviceProvisioning.setDeviceIdCookie(exchange,deviceId);
+    }
+    public Mono<Map<String, Object>> getSessionAttributes(ServerWebExchange exchange) {
+        return handleDeviceInfo(exchange)
+                .flatMap(deviceInfo ->
+                        headerValidator.buildHeaderData(exchange)
+                                .flatMap(headerData -> {
+                                    Map<String, Object> sessionData = new HashMap<>(headerData);
+                                    sessionData.put("X-Device-Id", deviceInfo.deviceId());
+                                    setDeviceCookie(exchange,deviceInfo.deviceId());
+                                    if (Channel.MOB.toString().equals(sessionData.get("Channel"))) {
+                                        String versionKey = headerData.get("X-App-Version-Key").toString();
+                                        sessionData.putAll(appVersionService.AppVersionHandling(versionKey));
+                                    }
+                                    return getSession("front", exchange)
+                                            .flatMap(sessionMap -> {
+                                                sessionData.putAll(sessionMap);
+                                                return deviceProvisioning
+                                                        .saveDeviceIdInSession(exchange, deviceInfo.deviceId())
+                                                        .thenReturn(sessionData);
+                                            });
+                                })
+                );
     }
 
 }

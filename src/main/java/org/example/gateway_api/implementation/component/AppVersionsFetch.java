@@ -43,7 +43,7 @@ public class AppVersionsFetch  {
                 .block();
         if (appInfo != null && !appInfo.isEmpty()) {
             versionService.saveAppVersions(appInfo);
-            logger.info("Saved {} app versions into in-memory repo", appInfo.size());
+            logger.debug("Saved {} app versions into in-memory repo", appInfo.size());
         } else {
             logger.warn("No app versions returned on startup");
         }
